@@ -1,3 +1,4 @@
+import {readInventory,incorporateInventory} from './inventory.js';
 import {groups,fields,fieldMap,documentTypes,imageViews,requiredFields,bulkFields} from './schema.js';
 import {emptyCatalog,newRecord,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js';
 import {readLocal,writeLocal,download} from './storage.js';
@@ -33,9 +34,10 @@ function render(){
   $('bulk-open').disabled=!state.selected.size;
   $('gallery').replaceChildren(...visible.map(card));$('gallery').classList.toggle('images-only',$('images-only').checked);
   $('gallery').style.setProperty('--card-size',['155px','230px','320px','440px'][state.size]);$('size').textContent=`Miniaturas: ${['pequeñas','medianas','grandes','muy grandes'][state.size]}`;
-  $('empty').hidden=visible.length>0;$('empty-title').textContent=c.records.length?'Sin coincidencias':'La colección empieza acá';$('empty-text').textContent=c.records.length?'Probá con otros filtros o términos.':'Creá una ficha o recuperá un catálogo JSON.';$('empty-new').hidden=c.records.length>0;
+  $('empty').hidden=visible.length>0;$('empty-title').textContent=c.records.length?'Sin coincidencias':'La colección empieza acá';$('empty-text').textContent=c.records.length?'Probá con otros filtros o términos.':'Leé las máquinas del inventario o recuperá tu catálogo JSON.';$('empty-new').hidden=c.records.length>0;
   $('storage-status').textContent=`Copia local${c.updatedAt?` · ${new Date(c.updatedAt).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'})}`:''}${state.remoteDirty?' · cambios sin guardar en GitHub':''}`;
   $('github-state').textContent=`${github.connected()?'Conectado para escritura':'Sin conexión de escritura'}${state.remoteSha?' · versión de partida leída':''}`;
+  $('save-online').textContent=state.remoteDirty?'Guardar JSON en GitHub':'JSON en GitHub';
   $('connect-github').textContent=github.connected()?'Desconectar GitHub':'Conectar GitHub';
 }
 function card(r){
@@ -43,7 +45,7 @@ function card(r){
   const b=node('button','card-open');b.setAttribute('aria-label',`Editar ${r.id}, ${title(r)}`);b.onclick=()=>openRecord(r.id);
   const image=node('div','card-image'),primary=r.images.find(i=>i.id===r.primaryImageId)||r.images[0];if(primary){const img=node('img');img.src=primary.thumb||primary.src;img.alt=primary.caption||title(r);img.loading='lazy';image.append(img);}else image.append(node('span','placeholder','⌨'));
   const body=node('div','card-body'),code=node('div','card-code');code.append(node('span','',r.id),node('span','badge'+(r.status==='Catalogada'?' done':''),r.status||'Borrador'));body.append(code,node('h2','',title(r)),node('p','card-info',[r.year,r.country,r.type].filter(Boolean).join(' · ')||'Datos por completar'));
-  const foot=node('div','card-foot');foot.append(node('span','',r.inventory||'Sin inventario'),node('span','',`${r.images.length} imágenes`));body.append(foot);b.append(image,body);c.append(b);return c;
+  const foot=node('div','card-foot');foot.append(node('span','',r.inventory||'Sin inventario'),node('span','',`${r.images.length} ${r.images.length===1?'imagen':'imágenes'}`));body.append(foot);b.append(image,body);c.append(b);return c;
 }
 function isDirty(){return state.draft&&state.dirty;}
 function closeEditor(){if(state.busy)return;if(isDirty()&&!confirm('Hay cambios sin guardar en esta ficha. ¿Descartarlos?'))return;state.draft=null;state.dirty=false;$('editor').close();}
@@ -51,7 +53,8 @@ function openRecord(id,queue){
   state.draft=structuredClone(state.catalog.records.find(r=>r.id===id)||newRecord(state.catalog.records));state.dirty=false;
   state.queue=queue||state.visible.map(r=>r.id);state.step=0;state.image=0;
   if($('pending').value){const index=groups.findIndex(g=>g.fields.some(f=>f[0]===$('pending').value));if(index>=0)state.step=index;}
-  $('editor-error').textContent='';$('record-id').textContent=`FICHA ${state.draft.id}`;$('editor-title').textContent=title(state.draft);$('delete-record').hidden=!id;
+  $('editor-error').textContent='';$('record-id').textContent=`${state.draft.inventory||'SIN INVENTARIO'} · FICHA ${state.draft.id}`;$('editor-title').textContent=title(state.draft);$('delete-record').hidden=!id;
+  $('record-source').hidden=!state.draft.inventorySource;$('record-source').textContent=`Inventario ${state.draft.inventory} · Solo lectura del origen. Los cambios de esta ficha se guardan en el JSON del catalogador.`;
   renderStep();renderMedia();if(!$('editor').open)$('editor').showModal();focusField();
 }
 function focusField(){requestAnimationFrame(()=>{$('fields').querySelector('input,select,textarea,button')?.focus({preventScroll:true});});}
@@ -61,6 +64,7 @@ function fieldControl(def,value,onchange,prefix='f'){
   if(type==='select'){input=node('select');const vals=[...new Set([...(def[3]||[]),value].filter(Boolean))];input.append(...vals.map(v=>option(v)));}
   else if(type==='area')input=node('textarea');else input=node('input');
   input.id=`${prefix}-${key}`;input.name=key;input.value=value||'';
+  if(key==='inventory'&&state.draft?.inventorySource){input.readOnly=true;input.title='Código conservado del inventario de Pródigo';}
   if(type==='combo'){const list=node('datalist');list.id=`${prefix}-${key}-list`;list.append(...vocabulary(key).map(v=>option(v)));input.setAttribute('list',list.id);wrapper.append(list);}
   if(requiredFields.includes(key)){wrapper.classList.add('required');input.setAttribute('aria-description','Necesario para marcar como catalogada');}
   input.addEventListener('input',()=>onchange(input.value));wrapper.append(input);return wrapper;
@@ -97,7 +101,24 @@ async function persistDraft(next=false){
   if(next&&nextId&&nextId!==r.id){openRecord(nextId,state.queue);}else{state.draft=null;$('editor').close();notice(next?'Ficha guardada. Terminaste el recorrido.':'Ficha guardada en la copia local.');}
 }
 function exportCatalog(){let c=state.catalog;if(state.draft&&state.dirty){const draft=structuredClone(state.draft);draft.status=missing(draft).length?'Borrador':draft.status;c=saveRecord(c,draft);}download(serialize(c),`prodigo-maquinas-${new Date().toLocaleDateString('en-CA')}.json`);}
+async function refreshInventory(){
+  $('inventory-state').textContent='Leyendo máquinas del inventario…';
+  try{
+    const items=await readInventory();const result=incorporateInventory(state.catalog,items);
+    if(result.summary.added||result.summary.updated)await commit(result.catalog);
+    const s=result.summary;
+    $('inventory-state').textContent=`${s.added} nuevas · ${s.updated} actualizadas · ${s.unchanged} sin cambios · Destino Museo`;
+    notice(`Inventario leído. ${s.conflicts.length?`${s.conflicts.length} diferencias conservan tu edición del catalogador. `:''}${state.remoteDirty?'Guardá el JSON en GitHub para compartir los cambios.':'El JSON está al día.'}`);
+  }catch(e){$('inventory-state').textContent='Inventario no disponible. Tu catálogo JSON se conserva.';throw e;}
+}
+function requestGithubConnection(){state.saveAfterConnect=true;$('token').value='';$('connection-error').textContent='';$('connection').showModal();}
+async function saveOnline(errorId='notice'){
+  if(!github.connected()){requestGithubConnection();return;}
+  await action(async()=>{const sha=await github.writeRemote(state.catalog,state.remoteSha);await commit(state.catalog,{sha,remoteDirty:false});notice('Catalogación guardada en data/catalogo.json de GitHub.');},errorId);
+}
 function bind(){
+  $('inventory-refresh').onclick=()=>action(refreshInventory);
+  $('save-online').onclick=()=>saveOnline();
   $('new').onclick=$('empty-new').onclick=()=>openRecord();$('close-editor').onclick=closeEditor;
   $('editor').addEventListener('cancel',e=>{e.preventDefault();closeEditor();});
   $('search').oninput=render;for(const id of ['brand-filter','status-filter','pending','sort','images-only'])$(id).onchange=render;
@@ -123,10 +144,10 @@ function bind(){
   document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{if(state.busy)return;$(b.dataset.close).close();if(b.dataset.close==='connection')$('token').value='';});
   $('export-json').onclick=()=>action(()=>exportCatalog(),'data-error');$('editor-backup').onclick=()=>action(()=>exportCatalog(),'editor-error');
   $('import-json').onchange=()=>{const file=$('import-json').files[0];$('import-json').value='';if(!file)return;action(async()=>{const incoming=parseCatalog(await file.text()),mode=$('import-mode').value;if(mode==='replace'&&state.catalog.records.length&&!confirm('¿Reemplazar la copia local por este JSON? Descargá un respaldo antes si necesitás conservarla.'))return;const c=mode==='merge'?mergeCatalogs(state.catalog,incoming):incoming;await commit(c,{remoteDirty:true});state.selected.clear();render();$('data-dialog').close();notice(`${incoming.records.length} fichas importadas. Guardá un respaldo al terminar.`);},'data-error');};
-  $('connect-github').onclick=()=>{if(github.connected()){github.disconnect();render();return;}$('token').value='';$('connection-error').textContent='';$('connection').showModal();};
-  $('connection-form').onsubmit=e=>{e.preventDefault();const token=$('token').value;$('token').value='';action(async()=>{await github.connect(token);$('connection').close();render();},'connection-error');};
+  $('connect-github').onclick=()=>{state.saveAfterConnect=false;if(github.connected()){github.disconnect();render();return;}$('token').value='';$('connection-error').textContent='';$('connection').showModal();};
+  $('connection-form').onsubmit=e=>{e.preventDefault();const token=$('token').value;$('token').value='';action(async()=>{await github.connect(token);if(state.saveAfterConnect){const sha=await github.writeRemote(state.catalog,state.remoteSha);await commit(state.catalog,{sha,remoteDirty:false});notice('Catalogación guardada en data/catalogo.json de GitHub.');}state.saveAfterConnect=false;$('connection').close();render();},'connection-error');};
   $('read-github').onclick=()=>action(async()=>{if(state.catalog.records.length&&!confirm('¿Reemplazar tu copia local por la de GitHub? Descargá antes tu JSON si tenés cambios que querés conservar.'))return;const remote=await github.readRemote();await commit(remote.catalog,{sha:remote.sha,remoteDirty:false});state.selected.clear();render();$('data-error').textContent='Versión de GitHub cargada en la copia local.';},'data-error');
-  $('save-github').onclick=()=>action(async()=>{if(!confirm('¿Guardar todas las fichas e imágenes en el repositorio público de GitHub?'))return;const sha=await github.writeRemote(state.catalog,state.remoteSha);await commit(state.catalog,{sha,remoteDirty:false});$('data-error').textContent='Catálogo guardado en GitHub.';},'data-error');
+  $('save-github').onclick=()=>saveOnline('data-error');
   $('bulk-open').onclick=()=>{$('bulk-summary').textContent=`${state.selected.size} máquinas seleccionadas: ${[...state.selected].slice(0,6).join(', ')}${state.selected.size>6?'…':''}`;$('bulk-error').textContent='';$('bulk-value').value='';bulkOptions();$('bulk-dialog').showModal();};
   $('bulk-field').onchange=bulkOptions;
   $('bulk-form').onsubmit=e=>{e.preventDefault();action(async()=>{const key=$('bulk-field').value,value=$('bulk-value').value.trim();if(!value)throw Error('Ingresá un valor.');if(key==='status'&&!fieldMap.get(key)[3].includes(value))throw Error('Elegí un estado válido.');if(!confirm(`¿Aplicar «${value}» a ${state.selected.size} máquinas?`))return;let next=state.catalog;for(const id of state.selected){const r=structuredClone(next.records.find(r=>r.id===id));r[key]=value;next=saveRecord(next,r);}await commit(next);state.selected.clear();$('bulk-dialog').close();render();notice('Cambio aplicado a las fichas seleccionadas.');},'bulk-error');};
@@ -137,6 +158,8 @@ async function init(){
   state.busy=true;document.body.classList.add('busy');
   $('pending').append(...fields.filter(f=>f[0]!=='status').map(f=>option(f[0],f[1])));$('bulk-field').append(...bulkFields.map(k=>option(k,fieldMap.get(k)[1])));$('image-view').append(...imageViews.map(v=>option(v)));bind();
   try{const saved=await readLocal();if(saved){state.localRevision=saved.revision||null;state.catalog=parseCatalog(saved.catalog);state.remoteSha=saved.remoteSha||null;state.remoteDirty=Boolean(saved.remoteDirty);}else{try{const remote=await github.readRemote();await commit(remote.catalog,{sha:remote.sha,remoteDirty:false});}catch{notice('Catálogo vacío. Podés crear fichas o importar un JSON.');}}}catch(e){notice(`No se pudo recuperar la copia local: ${e.message}. Podés importar un respaldo.`,true);}
-  render();state.busy=false;document.body.classList.remove('busy');
+  render();
+  if(!state.catalog.records.length){try{await refreshInventory();}catch(e){notice(e.message,true);}}
+  state.busy=false;document.body.classList.remove('busy');
 }
 init();

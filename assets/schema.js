@@ -1,6 +1,6 @@
 export const groups = [
   {id:'identification', title:'Identificación', fields:[
-    ['inventory','Identificador de inventario','text'], ['pieceNumber','Nº de pieza del coleccionista','text'],
+    ['inventory','Identificador de inventario','text'], ['inventoryOriginalNumber','Numeración original del inventario (serie / otro número)','text'], ['pieceNumber','Nº de pieza del coleccionista','text'],
     ['brand','Marca','combo',['Underwood','Remington','Royal','Olivetti','Olympia','Smith Corona','Adler','Hermes','Brother']],
     ['model','Modelo','combo'], ['modelNotes','Comentario sobre el modelo','area'],
     ['type','Tipo','combo',['De escritorio','Portátil','Ultraportátil']],

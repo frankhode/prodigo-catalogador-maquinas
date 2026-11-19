@@ -1,3 +1,4 @@
+import {safeInventoryImage} from './inventory-source.js';
 import {fields, requiredFields} from './schema.js';
 export const FORMAT='prodigo-catalogador-maquinas';
 export function emptyCatalog(){return {format:FORMAT,schemaVersion:1,updatedAt:null,records:[],vocabularies:{}};}
@@ -7,13 +8,14 @@ export function title(r){return [r.brand,r.model].filter(Boolean).join(' ')||'M�
 export function missing(r){return requiredFields.filter(k=>!String(r[k]??'').trim());}
 export function validateRecord(r,others=[]){
   if(!r.id)throw Error('Falta el número de ficha.');
+  if(r.inventorySource&&(r.inventorySource.system!=='prodigo-inventario'||r.inventorySource.code!==r.inventory))throw Error('El código P de una máquina vinculada al inventario no se puede cambiar.');
   if(r.status==='Catalogada'&&missing(r).length)throw Error('Completá marca y modelo antes de marcar la ficha como catalogada.');
   const inv=normalize(r.inventory).trim();
   if(inv&&others.some(o=>o.id!==r.id&&normalize(o.inventory).trim()===inv))throw Error('El identificador de inventario ya está asignado a otra máquina.');
   if(r.modelFrom&&r.modelTo&&/^\d{4}$/.test(r.modelFrom)&&/^\d{4}$/.test(r.modelTo)&&Number(r.modelFrom)>Number(r.modelTo))throw Error('El inicio de fabricación no puede ser posterior al final.');
   return r;
 }
-export function safeImage(src){return typeof src==='string'&&/^data:image\/(?:jpeg|png|webp);base64,[a-z\d+/=\s]+$/i.test(src);}
+export function safeImage(src){return typeof src==='string'&&(/^data:image\/(?:jpeg|png|webp);base64,[a-z\d+/=\s]+$/i.test(src)||safeInventoryImage(src));}
 export function parseCatalog(input){
   const c=typeof input==='string'?JSON.parse(input):structuredClone(input);
   if(!c||c.format!==FORMAT||c.schemaVersion!==1||!Array.isArray(c.records)||!c.vocabularies||Array.isArray(c.vocabularies)||typeof c.vocabularies!=='object')throw Error('El archivo no es un catálogo de máquinas compatible (versión 1).');

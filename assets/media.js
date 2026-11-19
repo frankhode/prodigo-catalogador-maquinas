@@ -1,4 +1,4 @@
-export async function loadImage(src){return new Promise((res,rej)=>{const img=new Image();img.onload=()=>res(img);img.onerror=()=>rej(Error('No se pudo leer la imagen. Usá JPG, PNG o WebP.'));img.src=src;});}
+export async function loadImage(src){return new Promise((res,rej)=>{const img=new Image();if(src.startsWith('https://'))img.crossOrigin='anonymous';img.onload=()=>res(img);img.onerror=()=>rej(Error('No se pudo leer la imagen. Usá JPG, PNG o WebP.'));img.src=src;});}
 function encode(img,max,quality=.82){const ratio=Math.min(1,max/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.width*ratio));c.height=Math.max(1,Math.round(img.height*ratio));c.getContext('2d').drawImage(img,0,0,c.width,c.height);return c.toDataURL('image/webp',quality);}
 export async function prepareImage(file){
   if(!/\.(jpe?g|png|webp)$/i.test(file.name))throw Error(`${file.name}: formato no admitido. Usá JPG, PNG o WebP.`);

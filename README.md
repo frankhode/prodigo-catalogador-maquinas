@@ -10,13 +10,27 @@ Dirección, una vez habilitado Pages: **https://frankhode.github.io/prodigo-cata
 
 Para uso local: descargar el repositorio y ejecutar `python -m http.server 8000` dentro de su carpeta; abrir `http://localhost:8000`. El uso mediante `file://` no es compatible porque la aplicación utiliza módulos de JavaScript.
 
+## Arquitectura actual: inventario de lectura → catalogación en JSON
+
+- Origen: las máquinas existentes en Pródigo Inventario, identificadas por su código patrimonial **P**.
+- Consulta: exclusivamente solicitudes **GET** a la función pública `museum-catalog` ya existente. No hay cliente Supabase, credenciales, llamadas RPC, modificaciones de tablas ni cargas al bucket desde este catalogador.
+- Alcance de esa consulta: objetos con destino **Museo**. Se filtran las categorías Máquina/Máquinas de escribir. Los objetos con destino Tienda/Otros y las fotos de lote sin código no están expuestos por la consulta actual.
+- Destino de escritura: **`data/catalogo.json` de este repositorio**, rama `main`. IndexedDB conserva la copia de trabajo antes de publicarla; pulsar **Guardar JSON en GitHub** para guardar los cambios compartidos. El botón pide conectar GitHub si hace falta.
+- Futuro: migrar la catalogación ampliada a Supabase cuando esté definida. Esta versión no escribe en Supabase.
+
+Al abrir un catálogo vacío se leen las máquinas del inventario. **Leer inventario** vuelve a consultar el origen: incorpora nuevas máquinas, completa campos vacíos de fichas existentes y actualiza valores que siguen iguales a su última lectura. Si modificaste un valor en el catalogador, se conserva tu edición. Nunca se borran fichas por haber dejado de aparecer en el origen. La operación completa se valida antes de guardar la copia de trabajo.
+
+El código P vinculado queda fijo. El número M identifica únicamente la ficha dentro del JSON. Se conserva marca, modelo, fecha y tipo; la numeración original del inventario tiene un campo propio porque puede ser una serie u otro número. Los campos ampliados, documentos y decisiones de imagen pertenecen al catalogador. `inventorySource` guarda el origen y los valores de la última lectura para comparar sin pisar correcciones.
+
+Las fotos del inventario se guardan como enlaces a la consulta pública, con su principal y adicionales. Requieren conexión y disponibilidad del origen. Los archivos agregados desde el catalogador sí quedan incrustados y optimizados en el JSON. Quitar una foto del catalogador no la quita del inventario ni vuelve a agregarla en la siguiente lectura. El respaldo JSON conserva los enlaces; no contiene una copia de esas fotos remotas.
+
 ## Primera carga
 
-1. Pulsar **Nueva máquina**. El número de ficha `M000001`, `M000002`… se genera dentro de este catálogo. No asigna un inventario patrimonial automáticamente: el campo **Identificador de inventario** admite los códigos existentes, por ejemplo `P000019`.
+1. Partir de **Leer inventario** para las máquinas ya inventariadas. Para una ficha adicional independiente, pulsar **Nueva máquina**. El número de ficha `M000001`, `M000002`… se genera dentro de este catálogo. No asigna un inventario patrimonial automáticamente: el campo **Identificador de inventario** admite los códigos existentes, por ejemplo `P000019`.
 2. Completar las secciones. Los combos permiten escribir valores nuevos; al guardar se incorporan a las listas. El número de serie y los identificadores son textos para conservar ceros y prefijos. Los años admiten `ca. 1916` y otras expresiones de incertidumbre.
 3. Agregar imágenes JPG, PNG o WebP. Se crean vistas de hasta 1600 px y miniaturas de 320 px. El original no se modifica ni se conserva dentro del JSON. Cada imagen admite vista, descripción, giro e indicación de principal. El visor permite zoom, arrastre y ampliación.
 4. **Guardar ficha** conserva la ficha en este navegador. La marca y el modelo son necesarios solamente para marcarla **Catalogada**. Las fichas incompletas pueden guardarse como **Borrador** o **En revisión**.
-5. Al terminar: **Datos y respaldos → Descargar JSON**. El archivo incluye las imágenes optimizadas y permite recuperar la colección en otra computadora. Dentro de la ficha, **Respaldo JSON** también incluye los cambios todavía abiertos.
+5. Al terminar: **Datos y respaldos → Descargar JSON**. El archivo incluye las imágenes agregadas optimizadas y los enlaces a las del inventario y permite recuperar la colección en otra computadora. Dentro de la ficha, **Respaldo JSON** también incluye los cambios todavía abiertos.
 
 La copia local se conserva en IndexedDB, ligada al navegador y a la dirección de la aplicación. Borrar los datos del sitio, usar otro perfil o cambiar la dirección no transporta esa copia. El JSON descargado y el guardado en GitHub son respaldos independientes y explícitos.
 
@@ -43,7 +57,7 @@ Las definiciones y sugerencias están en `assets/schema.js`. Las listas aprendid
 
 ## Guardado en GitHub
 
-El archivo compartido es `data/catalogo.json`, en este mismo repositorio, rama `main`. Se inicia vacío. La app no guarda automáticamente los datos locales en GitHub.
+El archivo compartido es `data/catalogo.json`, en este mismo repositorio, rama `main`. Incluye una base inicial leída del inventario (352 máquinas con destino Museo). La app no guarda automáticamente los datos locales en GitHub.
 
 1. En **Datos y respaldos → Conectar GitHub**, usar un token fine-grained limitado a `prodigo-catalogador-maquinas`, con **Contents: Read and write**. El token sólo vive en memoria durante la sesión; no se escribe en archivos ni en almacenamiento del navegador. Se envía exclusivamente a `api.github.com`. Desconectar o recargar lo elimina.
 2. **Leer GitHub** recupera la versión online y reemplaza la copia local, previa confirmación. Si tenés trabajo local, descargá primero su JSON.
@@ -54,7 +68,7 @@ El archivo compartido es `data/catalogo.json`, en este mismo repositorio, rama `
 
 ### Límites de esta primera versión
 
-Las imágenes se incluyen como WebP en el propio JSON para que el respaldo sea autocontenido. El guardado online se limita a **20 MB por JSON**; el uso local depende del espacio del navegador. Para un catálogo grande convendrá separar las imágenes en archivos y mantener sólo sus referencias en el JSON. Los originales deben guardarse por separado. No hay sincronización simultánea automática, importación de TIFF, ni relación automática con el inventario móvil o con el catálogo de fotos.
+Las imágenes agregadas se incluyen como WebP en el propio JSON para que el respaldo sea autocontenido. El guardado online se limita a **20 MB por JSON**; el uso local depende del espacio del navegador. Para un catálogo grande convendrá separar las imágenes en archivos y mantener sólo sus referencias en el JSON. Los originales deben guardarse por separado. No hay sincronización simultánea automática, importación de TIFF, ni escritura hacia el inventario móvil ni relación automática con el catálogo de fotos.
 
 ## Desarrollo y validación
 
@@ -62,4 +76,4 @@ Las imágenes se incluyen como WebP en el propio JSON para que el respaldo sea a
 - `npm start`: servidor local con Python.
 - `assets/app.js`: interfaz y recorridos; `core.js`: reglas del catálogo; `storage.js`: copia local; `github.js`: lectura/escritura online; `media.js`: imágenes.
 
-Los datos del catálogo se inician vacíos; no se inventan máquinas ni dataciones de ejemplo como registros de la colección.
+El JSON compartido contiene la base inicial del inventario y se actualiza leyendo el origen y guardando en GitHub. No se inventan máquinas ni dataciones de ejemplo.
