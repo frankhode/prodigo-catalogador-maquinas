@@ -6,11 +6,11 @@ const isMachine=value=>/^maquinas? (?:de )?escribir$/.test(normalize(value).trim
 const text=value=>value==null?'':String(value);
 function mapped(item){return {brand:text(item.brand),model:text(item.model),year:text(item.manufacture_date),type:text(item.type),inventoryOriginalNumber:text(item.original_number),destination:'Museo'};}
 export async function readInventory(fetchImpl=globalThis.fetch){
-  const items=[],codes=new Set();let after='';
+  const items=[],codes=new Set(),requestId=`${Date.now()}-${Math.random().toString(36).slice(2)}`;let after='';
   for(let page=0;page<1000;page++){
-    const url=INVENTORY_ENDPOINT+(after?`?desde=${after}`:'');
+    const url=new URL(INVENTORY_ENDPOINT);url.searchParams.set('_',requestId);if(after)url.searchParams.set('desde',after);
     // Deliberately GET only: never RPC, auth, mutations, or storage uploads.
-    const response=await fetchImpl(url,{method:'GET',cache:'no-store',signal:AbortSignal.timeout(20000)});
+    const response=await fetchImpl(url.href,{method:'GET',cache:'no-store',signal:AbortSignal.timeout(20000)});
     if(!response.ok)throw Error(`No se pudo leer el inventario (${response.status}). Podés seguir con tu JSON.`);
     const data=await response.json();
     if(!Array.isArray(data.items))throw Error('El inventario devolvió una respuesta incompatible.');
@@ -25,7 +25,7 @@ export async function readInventory(fetchImpl=globalThis.fetch){
   throw Error('El inventario excedió el límite de páginas de lectura.');
 }
 export function incorporateInventory(catalog=emptyCatalog(),items){
-  let next=parseCatalog(catalog);const summary={added:0,updated:0,unchanged:0,conflicts:[],excluded:0};
+  let next=parseCatalog(catalog);const summary={added:0,updated:0,unchanged:0,conflicts:[],excluded:0,notPresent:0,sourceCount:0};
   const seen=new Set();
   for(const item of items){
     if(!isMachine(item.category)){summary.excluded++;continue;}
@@ -52,5 +52,12 @@ export function incorporateInventory(catalog=emptyCatalog(),items){
     else if(JSON.stringify(r)!==before){next=saveRecord(next,r);summary.updated++;}
     else summary.unchanged++;
   }
+  summary.sourceCount=seen.size;
+  summary.notPresent=next.records.filter(r=>r.inventorySource?.system==='prodigo-inventario'&&!seen.has(r.inventory)).length;
   return {catalog:parseCatalog(next),summary};
+}
+
+export async function refreshFromInventory(catalog,fetchImpl=globalThis.fetch){
+  const items=await readInventory(fetchImpl);
+  return {...incorporateInventory(catalog,items),checkedAt:new Date().toISOString()};
 }

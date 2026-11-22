@@ -1,13 +1,13 @@
 import {vocabularyFor} from './vocabulary.js';
-import {attachCombo,closePicker} from './combo.js';
-import {readInventory,incorporateInventory} from './inventory.js';
+import {attachCombo,closePicker} from './combo.js?v=1.2.1';
+import {refreshFromInventory} from './inventory.js?v=1.2.1';
 import {groups,fields,fieldMap,documentFields,imageViews,requiredFields,bulkFields} from './schema.js';
 import {emptyCatalog,newRecord,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js';
 import {readLocal,writeLocal,download} from './storage.js';
 import * as github from './github.js';
 import {prepareImage,rotateImage} from './media.js';
 const $=id=>document.getElementById(id);
-const state={catalog:emptyCatalog(),remoteSha:null,remoteDirty:false,localRevision:null,selected:new Set(),draft:null,step:0,image:0,dirty:false,visible:[],queue:[],size:1,busy:false,zoom:1,x:0,y:0};
+const state={catalog:emptyCatalog(),remoteSha:null,remoteDirty:false,localRevision:null,inventoryCheckedAt:null,selected:new Set(),draft:null,step:0,image:0,dirty:false,visible:[],queue:[],size:1,busy:false,zoom:1,x:0,y:0};
 function node(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
 function option(value,label=value){const e=node('option','',label);e.value=value;return e;}
 function notice(message,error=false){$('notice').textContent=message;$('notice').classList.toggle('error',error);}
@@ -108,10 +108,11 @@ function exportCatalog(){let c=state.catalog;if(state.draft&&state.dirty){const 
 async function refreshInventory(){
   $('inventory-state').textContent='Leyendo máquinas del inventario…';
   try{
-    const items=await readInventory();const result=incorporateInventory(state.catalog,items);
+    const result=await refreshFromInventory(state.catalog);
     if(result.summary.added||result.summary.updated)await commit(result.catalog);
-    const s=result.summary;
-    $('inventory-state').textContent=`${s.added} nuevas · ${s.updated} actualizadas · ${s.unchanged} sin cambios · Destino Museo`;
+    const s=result.summary;state.inventoryCheckedAt=result.checkedAt;
+    const checked=new Date(result.checkedAt).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'medium'});
+    $('inventory-state').textContent=`Consultado ${checked} · ${s.sourceCount} máquinas en Museo · ${s.added} nuevas · ${s.updated} actualizadas${s.notPresent?` · ${s.notPresent} fichas previas conservadas fuera de la lectura actual`:''}`;
     notice(`Inventario leído. ${s.conflicts.length?`${s.conflicts.length} diferencias conservan tu edición del catalogador. `:''}${state.remoteDirty?'Guardá el JSON en GitHub para compartir los cambios.':'El JSON está al día.'}`);
   }catch(e){$('inventory-state').textContent='Inventario no disponible. Tu catálogo JSON se conserva.';throw e;}
 }
@@ -150,11 +151,12 @@ function bind(){
   $('import-json').onchange=()=>{const file=$('import-json').files[0];$('import-json').value='';if(!file)return;action(async()=>{const incoming=parseCatalog(await file.text()),mode=$('import-mode').value;if(mode==='replace'&&state.catalog.records.length&&!confirm('¿Reemplazar la copia local por este JSON? Descargá un respaldo antes si necesitás conservarla.'))return;const c=mode==='merge'?mergeCatalogs(state.catalog,incoming):incoming;await commit(c,{remoteDirty:true});state.selected.clear();render();$('data-dialog').close();notice(`${incoming.records.length} fichas importadas. Guardá un respaldo al terminar.`);},'data-error');};
   $('connect-github').onclick=()=>{state.saveAfterConnect=false;if(github.connected()){github.disconnect();render();return;}$('token').value='';$('connection-error').textContent='';$('connection').showModal();};
   $('connection-form').onsubmit=e=>{e.preventDefault();const token=$('token').value;$('token').value='';action(async()=>{await github.connect(token);if(state.saveAfterConnect){const sha=await github.writeRemote(state.catalog,state.remoteSha);await commit(state.catalog,{sha,remoteDirty:false});notice('Catalogación guardada en data/catalogo.json de GitHub.');}state.saveAfterConnect=false;$('connection').close();render();},'connection-error');};
-  $('read-github').onclick=()=>action(async()=>{if(state.catalog.records.length&&!confirm('¿Reemplazar tu copia local por la de GitHub? Descargá antes tu JSON si tenés cambios que querés conservar.'))return;const remote=await github.readRemote();await commit(remote.catalog,{sha:remote.sha,remoteDirty:false});state.selected.clear();render();$('data-error').textContent='Versión de GitHub cargada en la copia local.';},'data-error');
+  $('read-github').onclick=()=>action(async()=>{if(state.catalog.records.length&&!confirm('¿Reemplazar tu copia local por la de GitHub? Descargá antes tu JSON si tenés cambios que querés conservar.'))return;const remote=await github.readRemote();await commit(remote.catalog,{sha:remote.sha,remoteDirty:false});state.selected.clear();render();$('data-error').textContent='Versión de GitHub cargada en la copia local.';await refreshInventory();},'data-error');
   $('save-github').onclick=()=>saveOnline('data-error');
   $('bulk-open').onclick=()=>{$('bulk-summary').textContent=`${state.selected.size} máquinas seleccionadas: ${[...state.selected].slice(0,6).join(', ')}${state.selected.size>6?'…':''}`;$('bulk-error').textContent='';$('bulk-value').value='';bulkOptions();$('bulk-dialog').showModal();};
   $('bulk-field').onchange=bulkOptions;
   $('bulk-form').onsubmit=e=>{e.preventDefault();action(async()=>{const key=$('bulk-field').value,value=$('bulk-value').value.trim();if(!value)throw Error('Ingresá un valor.');if(!confirm(`¿Aplicar «${value}» a ${state.selected.size} máquinas?`))return;let next=state.catalog;for(const id of state.selected){const r=structuredClone(next.records.find(r=>r.id===id));r[key]=value;next=saveRecord(next,r);}await commit(next);state.selected.clear();$('bulk-dialog').close();render();notice('Cambio aplicado a las fichas seleccionadas.');},'bulk-error');};
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!state.busy&&!$('editor').open&&Date.now()-new Date(state.inventoryCheckedAt||0).getTime()>60000)action(refreshInventory);});
   window.addEventListener('beforeunload',e=>{if(isDirty()){e.preventDefault();e.returnValue='';}});
 }
 function bulkOptions(){closePicker();}
@@ -165,7 +167,8 @@ async function init(){
   attachCombo($('bulk-value'),{label:'Valor para seleccionadas',getOptions:()=>vocabulary($('bulk-field').value),onChange:()=>{}});bind();
   try{const saved=await readLocal();if(saved){state.localRevision=saved.revision||null;state.catalog=parseCatalog(saved.catalog);state.remoteSha=saved.remoteSha||null;state.remoteDirty=Boolean(saved.remoteDirty);}else{try{const remote=await github.readRemote();await commit(remote.catalog,{sha:remote.sha,remoteDirty:false});}catch{notice('Catálogo vacío. Podés crear fichas o importar un JSON.');}}}catch(e){notice(`No se pudo recuperar la copia local: ${e.message}. Podés importar un respaldo.`,true);}
   render();
-  if(!state.catalog.records.length){try{await refreshInventory();}catch(e){notice(e.message,true);}}
+  // Always consult the source, even when IndexedDB or GitHub already has records.
+  try{await refreshInventory();}catch(e){notice(e.message,true);}
   state.busy=false;document.body.classList.remove('busy');
 }
 init();

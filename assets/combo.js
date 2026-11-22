@@ -1,6 +1,14 @@
+import {installPickerEvents} from './picker-events.js';
 import {matchingTerms,termKey} from './vocabulary.js';
-let activePicker=null,initialized=false;
-function initializeDismiss(){if(initialized)return;initialized=true;document.addEventListener('pointerdown',e=>{if(activePicker&&!activePicker.row.contains(e.target))closePicker();},true);document.addEventListener('scroll',e=>{if(activePicker&&!activePicker.panel.contains(e.target))closePicker();},true);window.addEventListener('resize',closePicker);}
+let activePicker=null,initialized=false,layoutFrame=0;
+function repositionPicker(){
+  if(layoutFrame||!activePicker)return;
+  layoutFrame=requestAnimationFrame(()=>{layoutFrame=0;activePicker?.position();});
+}
+function initializeDismiss(){
+  if(initialized)return;initialized=true;
+  installPickerEvents({document,window,getActive:()=>activePicker,close:closePicker,reposition:repositionPicker});
+}
 const el=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
 export function closePicker(){activePicker?.close();}
 // A picker supplements the original input, preserving multiline editing and Enter navigation.
@@ -30,12 +38,12 @@ export function attachCombo(input,{label,getOptions,onChange}){
     setActive(-1);
   }
   function position(){
-    const rect=row.getBoundingClientRect(),width=Math.min(Math.max(rect.width,300),window.innerWidth-24),height=Math.min(365,window.innerHeight-24);
-    panel.style.width=`${width}px`;panel.style.maxHeight=`${height}px`;panel.style.left=`${Math.max(12,Math.min(rect.left,window.innerWidth-width-12))}px`;
-    const actual=panel.getBoundingClientRect().height||height;panel.style.top=`${Math.max(12,Math.min(rect.bottom+6,window.innerHeight-actual-12))}px`;
+    const rect=row.getBoundingClientRect(),viewport=window.visualViewport,viewportLeft=viewport?.offsetLeft||0,viewportTop=viewport?.offsetTop||0,viewportWidth=viewport?.width||window.innerWidth,viewportHeight=viewport?.height||window.innerHeight,width=Math.min(Math.max(rect.width,300),viewportWidth-24),height=Math.min(365,viewportHeight-24);
+    panel.style.width=`${width}px`;panel.style.maxHeight=`${height}px`;panel.style.left=`${Math.max(viewportLeft+12,Math.min(rect.left,viewportLeft+viewportWidth-width-12))}px`;
+    const actual=panel.getBoundingClientRect().height||height;panel.style.top=`${Math.max(viewportTop+12,Math.min(rect.bottom+6,viewportTop+viewportHeight-actual-12))}px`;
   }
   function open(){
-    if(input.readOnly||input.disabled)return;closePicker();opened=true;activePicker={panel,row,close};search.value='';draw();
+    if(input.readOnly||input.disabled)return;closePicker();opened=true;activePicker={panel,row,close,position};search.value='';draw();
     if(typeof panel.showPopover==='function')panel.showPopover();else panel.hidden=false;
     toggle.setAttribute('aria-expanded','true');search.setAttribute('aria-expanded','true');position();search.focus({preventScroll:true});
   }
@@ -51,7 +59,7 @@ export function attachCombo(input,{label,getOptions,onChange}){
     else if(e.key==='Tab')close();
   };
   input.addEventListener('keydown',e=>{if(e.key==='ArrowDown'&&(e.altKey||input.tagName!=='TEXTAREA')){e.preventDefault();e.stopPropagation();open();}});
-  panel.addEventListener('toggle',e=>{if(e.newState==='closed')finish();});
+  panel.addEventListener('toggle',e=>{if(e.newState==='closed'&&!panel.matches(':popover-open'))finish();});
   // Native popovers close on outside clicks and when another picker opens.
   return {close,refresh(){toggle.disabled=input.readOnly||input.disabled;if(opened){draw();position();}}};
 }

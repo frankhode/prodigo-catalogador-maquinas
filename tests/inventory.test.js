@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {emptyCatalog,saveRecord,newRecord,parseCatalog,serialize,safeImage} from '../assets/core.js';
-import {readInventory,incorporateInventory,INVENTORY_ENDPOINT} from '../assets/inventory.js';
+import {readInventory,incorporateInventory,refreshFromInventory,INVENTORY_ENDPOINT} from '../assets/inventory.js';
 import {inventoryPhoto} from '../assets/inventory-source.js';
 const item=(extra={})=>({code:'P000019',category:'Máquinas de escribir',brand:'Olivetti',model:'Lettera 22',manufacture_date:'ca. 1950',type:'Portátil',original_number:'000123-A',photo_count:2,...extra});
 test('read-only pagination uses GET exclusively and keeps complete snapshot',async()=>{
@@ -43,4 +43,22 @@ test('an incomplete source update cannot invalidate a catalogued machine',()=>{
 test('matching a preexisting inventory code canonicalizes case and surrounding spaces',()=>{
  const c=saveRecord(emptyCatalog(),{...newRecord(),inventory:' p000019 ',brand:'Olivetti'});
  const result=incorporateInventory(c,[item()]);assert.equal(result.catalog.records.length,1);assert.equal(result.catalog.records[0].inventory,'P000019');
+});
+
+test('fresh reads update a nonempty cached catalogue and retain catalogue corrections',async()=>{
+  let c=incorporateInventory(emptyCatalog(),[item()]).catalog;
+  c=saveRecord(c,{...c.records[0],model:'Modelo corregido',notes:'Trabajo local'});
+  const original=serialize(c);const calls=[];
+  const result=await refreshFromInventory(c,async(url,options)=>{calls.push({url,options});return Response.json({items:[item({manufacture_date:'ca. 1952'}),item({code:'P000020',brand:'Royal'})],next:null});});
+  assert.equal(result.catalog.records.length,2);assert.equal(result.summary.added,1);assert.equal(result.summary.updated,1);assert.equal(result.summary.sourceCount,2);assert.ok(Number.isFinite(Date.parse(result.checkedAt)));assert.equal(result.catalog.records[0].model,'Modelo corregido');assert.equal(result.catalog.records[0].year,'ca. 1952');assert.equal(result.catalog.records[0].notes,'Trabajo local');assert.equal(serialize(c),original);assert.equal(calls[0].options.method,'GET');assert.ok(new URL(calls[0].url).searchParams.get('_'));
+});
+test('each recheck bypasses old responses without altering catalogue on network failure',async()=>{
+  const c=incorporateInventory(emptyCatalog(),[item()]).catalog,original=serialize(c),urls=[];
+  const fetch=async(url)=>{urls.push(url);return Response.json({items:[item()],next:null});};
+  await refreshFromInventory(c,fetch);await refreshFromInventory(c,fetch);assert.notEqual(urls[0],urls[1]);
+  await assert.rejects(refreshFromInventory(c,async()=>new Response('',{status:503})),/503/);assert.equal(serialize(c),original);
+});
+test('records absent from the current source are counted and retained for review',()=>{
+  const c=incorporateInventory(emptyCatalog(),[item(),item({code:'P000020'})]).catalog;
+  const result=incorporateInventory(c,[item()]);assert.equal(result.catalog.records.length,2);assert.equal(result.summary.sourceCount,1);assert.equal(result.summary.notPresent,1);
 });
