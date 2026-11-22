@@ -27,7 +27,7 @@ Las fotos del inventario se guardan como enlaces a la consulta pública, con su 
 ## Primera carga
 
 1. Partir de **Leer inventario** para las máquinas ya inventariadas. Para una ficha adicional independiente, pulsar **Nueva máquina**. El número de ficha `M000001`, `M000002`… se genera dentro de este catálogo. No asigna un inventario patrimonial automáticamente: el campo **Identificador de inventario** admite los códigos existentes, por ejemplo `P000019`.
-2. Completar las secciones. Los combos permiten escribir valores nuevos; al guardar se incorporan a las listas. El número de serie y los identificadores son textos para conservar ceros y prefijos. Los años admiten `ca. 1916` y otras expresiones de incertidumbre.
+2. Completar las secciones. Todos los campos editables tienen una lista con buscador: el botón junto al campo abre las opciones cargadas. Escribí en el buscador para filtrar o elegí **Agregar** si el valor es nuevo; al guardar la ficha queda disponible en la lista de ese campo. El número de serie y los identificadores son textos para conservar ceros y prefijos. Los años admiten `ca. 1916` y otras expresiones de incertidumbre.
 3. Agregar imágenes JPG, PNG o WebP. Se crean vistas de hasta 1600 px y miniaturas de 320 px. El original no se modifica ni se conserva dentro del JSON. Cada imagen admite vista, descripción, giro e indicación de principal. El visor permite zoom, arrastre y ampliación.
 4. **Guardar ficha** conserva la ficha en este navegador. La marca y el modelo son necesarios solamente para marcarla **Catalogada**. Las fichas incompletas pueden guardarse como **Borrador** o **En revisión**.
 5. Al terminar: **Datos y respaldos → Descargar JSON**. El archivo incluye las imágenes agregadas optimizadas y los enlaces a las del inventario y permite recuperar la colección en otra computadora. Dentro de la ficha, **Respaldo JSON** también incluye los cambios todavía abiertos.
@@ -44,7 +44,9 @@ La copia local se conserva en IndexedDB, ligada al navegador y a la dirección d
 - **Documentación:** lista repetible de libros, publicidades, efímeras, garantías, facturas, diplomas, fotografías de época, postales, manuales u otros documentos, cada uno con fecha, referencia y notas.
 - **Museografía:** objetos asociados, precio histórico, equivalencia con fuente y fecha, propuesta museográfica, arte, notas y fuentes.
 
-Las definiciones y sugerencias están en `assets/schema.js`. Las listas aprendidas se guardan en `vocabularies` dentro del JSON. Las expresiones de la ficha son transcripciones del catalogador; la app no verifica atribuciones ni dataciones históricas.
+Las definiciones y sugerencias están en `assets/schema.js`. Las listas aprendidas se guardan en `vocabularies` dentro del JSON. Incluyen todos los campos, los textos largos, los datos de documentos asociados y la vista/descripción de imágenes. Las opciones se recuperan también de las fichas ya cargadas, sin tener que migrarlas. Cada campo conserva su lista independiente; se evitan opciones duplicadas que sólo cambian mayúsculas, tildes o espacios. La selección reutiliza el texto guardado sin reescribir los registros anteriores.
+
+El botón junto al campo abre el buscador; **Alt+Flecha abajo** también lo abre (en campos cortos basta Flecha abajo). **Flechas arriba/abajo y Enter** eligen una opción; **Esc** cierra solamente la lista. Clic afuera también la cierra. Los textos largos conservan sus saltos de línea. Se pueden agregar estados de catalogación y tipos de documento/vistas nuevos; los filtros de estado incluyen los valores cargados. El código P vinculado al inventario conserva su protección y no se reasigna desde una lista. Las expresiones de la ficha son transcripciones del catalogador; la app no verifica atribuciones ni dataciones históricas.
 
 ## Teclado, grilla y pendientes
 

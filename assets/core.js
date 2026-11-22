@@ -1,3 +1,4 @@
+import {rememberRecordTerms} from './vocabulary.js';
 import {safeInventoryImage} from './inventory-source.js';
 import {fields, requiredFields} from './schema.js';
 export const FORMAT='prodigo-catalogador-maquinas';
@@ -38,7 +39,7 @@ export function serialize(c){return JSON.stringify(c,null,2)+'\n';}
 export function saveRecord(c,record){
   const next=structuredClone(c),r=structuredClone(record);validateRecord(r,next.records);r.updatedAt=new Date().toISOString();
   const ix=next.records.findIndex(o=>o.id===r.id);if(ix<0)next.records.push(r);else next.records[ix]=r;
-  for(const [key,,type] of fields)if(type==='combo'&&r[key]?.trim())next.vocabularies[key]=[...new Set([...(next.vocabularies[key]||[]),r[key].trim()])];
+  rememberRecordTerms(next,r);
   next.updatedAt=r.updatedAt;return next;
 }
 export function filterRecords(records,{q='',brand='',status='',pending=''}={}){

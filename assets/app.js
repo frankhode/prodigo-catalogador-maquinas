@@ -1,5 +1,7 @@
+import {vocabularyFor} from './vocabulary.js';
+import {attachCombo,closePicker} from './combo.js';
 import {readInventory,incorporateInventory} from './inventory.js';
-import {groups,fields,fieldMap,documentTypes,imageViews,requiredFields,bulkFields} from './schema.js';
+import {groups,fields,fieldMap,documentFields,imageViews,requiredFields,bulkFields} from './schema.js';
 import {emptyCatalog,newRecord,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js';
 import {readLocal,writeLocal,download} from './storage.js';
 import * as github from './github.js';
@@ -18,11 +20,12 @@ async function commit(catalog,{sha=state.remoteSha,remoteDirty=true}={}){
   try{await writeLocal(value,state.localRevision);}catch(e){throw Error(e.message==='LOCAL_CONFLICT'?'Otra pestaña modificó la copia local. Descargá tu respaldo de cambios antes de recargar.':'No se pudo guardar en este navegador (espacio o permisos). Conservá la ficha abierta y descargá un respaldo antes de salir.');}
   state.localRevision=revision;state.catalog=catalog;state.remoteSha=sha;state.remoteDirty=remoteDirty;render();
 }
-function vocabulary(key){const def=fieldMap.get(key);return [...new Set([...(def?.[3]||[]),...(state.catalog.vocabularies[key]||[]),...state.catalog.records.map(r=>r[key]).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'es'));}
+function vocabulary(key){return vocabularyFor(state.catalog,key,state.draft);}
 function filters(){return {q:$('search').value,brand:$('brand-filter').value,status:$('status-filter').value,pending:$('pending').value};}
 function render(){
   const c=state.catalog;$('total').textContent=c.records.length;$('complete').textContent=c.records.filter(r=>r.status==='Catalogada').length;$('drafts').textContent=c.records.filter(r=>r.status!=='Catalogada').length;
   const prev=$('brand-filter').value;$('brand-filter').replaceChildren(option('','Todas las marcas'),...[...new Set(c.records.map(r=>r.brand).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')).map(v=>option(v)));$('brand-filter').value=prev;
+  const status=$('status-filter').value;$('status-filter').replaceChildren(option('','Todos los estados'),...vocabulary('status').map(v=>option(v)));$('status-filter').value=status;
   const visible=filterRecords(c.records,filters());const sort=$('sort').value;
   visible.sort((a,b)=>{
     if(sort==='updatedAt')return String(b.updatedAt||'').localeCompare(String(a.updatedAt||''));
@@ -48,7 +51,7 @@ function card(r){
   const foot=node('div','card-foot');foot.append(node('span','',r.inventory||'Sin inventario'),node('span','',`${r.images.length} ${r.images.length===1?'imagen':'imágenes'}`));body.append(foot);b.append(image,body);c.append(b);return c;
 }
 function isDirty(){return state.draft&&state.dirty;}
-function closeEditor(){if(state.busy)return;if(isDirty()&&!confirm('Hay cambios sin guardar en esta ficha. ¿Descartarlos?'))return;state.draft=null;state.dirty=false;$('editor').close();}
+function closeEditor(){closePicker();if(state.busy)return;if(isDirty()&&!confirm('Hay cambios sin guardar en esta ficha. ¿Descartarlos?'))return;state.draft=null;state.dirty=false;$('editor').close();}
 function openRecord(id,queue){
   state.draft=structuredClone(state.catalog.records.find(r=>r.id===id)||newRecord(state.catalog.records));state.dirty=false;
   state.queue=queue||state.visible.map(r=>r.id);state.step=0;state.image=0;
@@ -60,16 +63,16 @@ function openRecord(id,queue){
 function focusField(){requestAnimationFrame(()=>{$('fields').querySelector('input,select,textarea,button')?.focus({preventScroll:true});});}
 function markDirty(){state.dirty=true;}
 function fieldControl(def,value,onchange,prefix='f'){
-  const [key,label,type]=def;const wrapper=node('label',type==='area'?'wide':'');wrapper.htmlFor=`${prefix}-${key}`;wrapper.append(node('span','',label));let input;
-  if(type==='select'){input=node('select');const vals=[...new Set([...(def[3]||[]),value].filter(Boolean))];input.append(...vals.map(v=>option(v)));}
-  else if(type==='area')input=node('textarea');else input=node('input');
-  input.id=`${prefix}-${key}`;input.name=key;input.value=value||'';
+  const [key,label,type]=def;const wrapper=node('div','field-control'+(type==='area'?' wide':''));const caption=node('label');caption.htmlFor=`${prefix}-${key}`;caption.append(node('span','',label));wrapper.append(caption);
+  const input=node(type==='area'?'textarea':'input');input.id=`${prefix}-${key}`;input.name=key;input.value=value||'';
   if(key==='inventory'&&state.draft?.inventorySource){input.readOnly=true;input.title='Código conservado del inventario de Pródigo';}
-  if(type==='combo'){const list=node('datalist');list.id=`${prefix}-${key}-list`;list.append(...vocabulary(key).map(v=>option(v)));input.setAttribute('list',list.id);wrapper.append(list);}
-  if(requiredFields.includes(key)){wrapper.classList.add('required');input.setAttribute('aria-description','Necesario para marcar como catalogada');}
-  input.addEventListener('input',()=>onchange(input.value));wrapper.append(input);return wrapper;
+  if(requiredFields.includes(key)&&prefix==='f'){caption.classList.add('required');input.setAttribute('aria-description','Necesario para marcar como catalogada');}
+  input.addEventListener('input',()=>onchange(input.value));wrapper.append(input);
+  const vocabularyKey=prefix.startsWith('doc-')?`document.${key}`:key;
+  attachCombo(input,{label,getOptions:()=>vocabulary(vocabularyKey),onChange:onchange});return wrapper;
 }
 function renderStep(){
+  closePicker();
   const group=groups[state.step];$('steps').replaceChildren(...groups.map((g,i)=>{const b=node('button',i===state.step?'active':'',`${i+1}. ${g.title}`);b.type='button';b.setAttribute('aria-current',i===state.step?'step':'false');b.onclick=()=>{state.step=i;renderStep();focusField();};return b;}));
   $('step-counter').textContent=`SECCIÓN ${state.step+1} DE ${groups.length}`;$('step-title').textContent=group.title;
   const form=$('fields');form.replaceChildren();form.className='';
@@ -80,7 +83,7 @@ function renderStep(){
 function renderDocs(){
   const form=$('fields');if(!state.draft.documents.length)form.append(node('p','doc-empty','Libros, publicidades, efímeras, garantías y otros documentos vinculados a esta máquina.'));
   state.draft.documents.forEach((doc,index)=>{const wrap=node('div','doc'),grid=node('div','field-grid');
-    for(const def of [['type','Tipo de documento','select',documentTypes],['title','Título / descripción','text'],['date','Fecha','text'],['reference','Referencia / ubicación / enlace','text'],['notes','Notas','area']])grid.append(fieldControl(def,doc[def[0]],v=>{doc[def[0]]=v;markDirty();},`doc-${index}`));
+    for(const def of documentFields)grid.append(fieldControl(def,doc[def[0]],v=>{doc[def[0]]=v;markDirty();},`doc-${index}`));
     const remove=node('button','danger subtle','Quitar documento');remove.type='button';remove.onclick=()=>{if(!confirm('¿Quitar este documento de la ficha?'))return;state.draft.documents.splice(index,1);markDirty();renderStep();};wrap.append(grid,remove);form.append(wrap);
   });
   const add=node('button','','＋ Agregar documento');add.type='button';add.onclick=()=>{state.draft.documents.push({type:'Libro',title:'',date:'',reference:'',notes:''});markDirty();renderStep();};form.append(add);
@@ -89,6 +92,7 @@ function currentImage(){return state.draft?.images[state.image];}
 function transformImage(){$('main-image').style.transform=`translate(${state.x}px,${state.y}px) scale(${state.zoom})`;}
 function resetZoom(){state.zoom=1;state.x=0;state.y=0;transformImage();}
 function renderMedia(){
+  closePicker();
   const image=currentImage();$('main-image').hidden=!image;$('no-image').hidden=Boolean(image);$('image-details').hidden=!image;
   if(image){$('main-image').src=image.src;$('main-image').alt=image.caption||image.name||'Máquina en catalogación';$('image-view').value=image.view||'General';$('image-caption').value=image.caption||'';$('set-primary').disabled=image.id===state.draft.primaryImageId;$('set-primary').textContent=image.id===state.draft.primaryImageId?'★ Imagen principal':'Usar como principal';}else $('main-image').removeAttribute('src');
   $('thumbnails').replaceChildren(...state.draft.images.map((im,i)=>{const b=node('button','thumb'+(state.image===i?' active':''));b.title=`${im.view}: ${im.name}`;b.setAttribute('aria-label',`Ver imagen ${i+1}: ${im.name}`);const img=node('img');img.src=im.thumb||im.src;img.alt=im.name;b.append(img);if(im.id===state.draft.primaryImageId)b.append(node('span','star','★'));b.onclick=()=>{state.image=i;renderMedia();};return b;}));
@@ -129,11 +133,11 @@ function bind(){
   $('prev-step').onclick=()=>{if(state.step>0){state.step--;renderStep();focusField();}};$('next-step').onclick=()=>{if(state.step<groups.length-1){state.step++;renderStep();focusField();}};
   $('save-record').onclick=()=>action(()=>persistDraft(),'editor-error');$('save-next').onclick=()=>action(()=>persistDraft(true),'editor-error');
   $('fields').onsubmit=e=>e.preventDefault();
-  $('fields').onkeydown=e=>{if(e.key!=='Enter'||e.ctrlKey||e.metaKey||e.shiftKey||e.isComposing||e.target.tagName==='TEXTAREA'||e.target.tagName==='BUTTON')return;e.preventDefault();const inputs=[...$('fields').querySelectorAll('input,select,textarea')];const next=inputs[inputs.indexOf(e.target)+1];if(next)next.focus();else if(state.step<groups.length-1){state.step++;renderStep();focusField();}else $('save-record').focus();};
+  $('fields').onkeydown=e=>{if(e.key!=='Enter'||e.ctrlKey||e.metaKey||e.shiftKey||e.isComposing||e.target.tagName==='TEXTAREA'||e.target.tagName==='BUTTON')return;e.preventDefault();const inputs=[...$('fields').querySelectorAll('input,select,textarea')].filter(input=>!input.closest('.value-picker')&&!input.disabled);const next=inputs[inputs.indexOf(e.target)+1];if(next)next.focus();else if(state.step<groups.length-1){state.step++;renderStep();focusField();}else $('save-record').focus();};
   $('editor').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();action(()=>persistDraft(e.shiftKey),'editor-error');}});
   $('delete-record').onclick=()=>action(async()=>{if(!confirm(`¿Eliminar ${state.draft.id} y todas sus imágenes? Esta acción se aplica a la copia local.`))return;const c=structuredClone(state.catalog);c.records=c.records.filter(r=>r.id!==state.draft.id);c.updatedAt=new Date().toISOString();await commit(c);state.draft=null;state.dirty=false;$('editor').close();notice('Ficha eliminada de la copia local.');},'editor-error');
   $('image-files').onchange=()=>{const files=[...$('image-files').files];$('image-files').value='';action(async()=>{let added=0;try{for(const file of files){$('editor-error').textContent=`Preparando imagen ${added+1} de ${files.length}…`;const im=await prepareImage(file);state.draft.images.push(im);state.image=state.draft.images.length-1;if(!state.draft.primaryImageId)state.draft.primaryImageId=im.id;markDirty();added++;}}finally{renderMedia();}$('editor-error').textContent='';},'editor-error');};
-  $('image-view').onchange=()=>{currentImage().view=$('image-view').value;markDirty();};$('image-caption').oninput=()=>{currentImage().caption=$('image-caption').value;markDirty();};
+  $('image-view').oninput=()=>{currentImage().view=$('image-view').value;markDirty();};$('image-caption').oninput=()=>{currentImage().caption=$('image-caption').value;markDirty();};
   $('set-primary').onclick=()=>{state.draft.primaryImageId=currentImage().id;markDirty();renderMedia();};
   $('remove-image').onclick=()=>{if(!confirm('¿Quitar esta imagen de la ficha?'))return;const [removed]=state.draft.images.splice(state.image,1);if(removed.id===state.draft.primaryImageId)state.draft.primaryImageId=state.draft.images[0]?.id||'';state.image=Math.max(0,state.image-1);markDirty();renderMedia();};
   $('rotate-image').onclick=()=>action(async()=>{state.draft.images[state.image]=await rotateImage(currentImage());markDirty();renderMedia();},'editor-error');
@@ -150,13 +154,15 @@ function bind(){
   $('save-github').onclick=()=>saveOnline('data-error');
   $('bulk-open').onclick=()=>{$('bulk-summary').textContent=`${state.selected.size} máquinas seleccionadas: ${[...state.selected].slice(0,6).join(', ')}${state.selected.size>6?'…':''}`;$('bulk-error').textContent='';$('bulk-value').value='';bulkOptions();$('bulk-dialog').showModal();};
   $('bulk-field').onchange=bulkOptions;
-  $('bulk-form').onsubmit=e=>{e.preventDefault();action(async()=>{const key=$('bulk-field').value,value=$('bulk-value').value.trim();if(!value)throw Error('Ingresá un valor.');if(key==='status'&&!fieldMap.get(key)[3].includes(value))throw Error('Elegí un estado válido.');if(!confirm(`¿Aplicar «${value}» a ${state.selected.size} máquinas?`))return;let next=state.catalog;for(const id of state.selected){const r=structuredClone(next.records.find(r=>r.id===id));r[key]=value;next=saveRecord(next,r);}await commit(next);state.selected.clear();$('bulk-dialog').close();render();notice('Cambio aplicado a las fichas seleccionadas.');},'bulk-error');};
+  $('bulk-form').onsubmit=e=>{e.preventDefault();action(async()=>{const key=$('bulk-field').value,value=$('bulk-value').value.trim();if(!value)throw Error('Ingresá un valor.');if(!confirm(`¿Aplicar «${value}» a ${state.selected.size} máquinas?`))return;let next=state.catalog;for(const id of state.selected){const r=structuredClone(next.records.find(r=>r.id===id));r[key]=value;next=saveRecord(next,r);}await commit(next);state.selected.clear();$('bulk-dialog').close();render();notice('Cambio aplicado a las fichas seleccionadas.');},'bulk-error');};
   window.addEventListener('beforeunload',e=>{if(isDirty()){e.preventDefault();e.returnValue='';}});
 }
-function bulkOptions(){const key=$('bulk-field').value;$('bulk-options').replaceChildren(...vocabulary(key).map(v=>option(v)));}
+function bulkOptions(){closePicker();}
 async function init(){
   state.busy=true;document.body.classList.add('busy');
-  $('pending').append(...fields.filter(f=>f[0]!=='status').map(f=>option(f[0],f[1])));$('bulk-field').append(...bulkFields.map(k=>option(k,fieldMap.get(k)[1])));$('image-view').append(...imageViews.map(v=>option(v)));bind();
+  $('pending').append(...fields.filter(f=>f[0]!=='status').map(f=>option(f[0],f[1])));$('bulk-field').append(...bulkFields.map(k=>option(k,fieldMap.get(k)[1])));attachCombo($('image-view'),{label:'Vista de imagen',getOptions:()=>vocabulary('image.view'),onChange:value=>{if(currentImage()){currentImage().view=value;markDirty();renderMedia();}}});
+  attachCombo($('image-caption'),{label:'Descripción de imagen',getOptions:()=>vocabulary('image.caption'),onChange:value=>{if(currentImage()){currentImage().caption=value;markDirty();}}});
+  attachCombo($('bulk-value'),{label:'Valor para seleccionadas',getOptions:()=>vocabulary($('bulk-field').value),onChange:()=>{}});bind();
   try{const saved=await readLocal();if(saved){state.localRevision=saved.revision||null;state.catalog=parseCatalog(saved.catalog);state.remoteSha=saved.remoteSha||null;state.remoteDirty=Boolean(saved.remoteDirty);}else{try{const remote=await github.readRemote();await commit(remote.catalog,{sha:remote.sha,remoteDirty:false});}catch{notice('Catálogo vacío. Podés crear fichas o importar un JSON.');}}}catch(e){notice(`No se pudo recuperar la copia local: ${e.message}. Podés importar un respaldo.`,true);}
   render();
   if(!state.catalog.records.length){try{await refreshInventory();}catch(e){notice(e.message,true);}}

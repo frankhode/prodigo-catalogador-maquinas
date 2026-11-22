@@ -44,6 +44,7 @@ export const groups = [
 export const fields = groups.flatMap(g=>g.fields);
 export const fieldMap = new Map(fields.map(f=>[f[0],f]));
 export const documentTypes=['Libro','Publicidad','Efímera','Garantía','Factura de compra','Diploma','Fotografía de época','Postal','Manual','Otro'];
+export const documentFields=[['type','Tipo de documento','select',documentTypes],['title','Título / descripción','text'],['date','Fecha','text'],['reference','Referencia / ubicación / enlace','text'],['notes','Notas','area']];
 export const imageViews=['General','Frente','Reverso','Lateral','Detalle','Número de serie','Teclado','Documentación','Otro'];
 export const requiredFields=['brand','model'];
 export const bulkFields=['brand','model','manufacturer','country','type','mechanism','color','keyboardLanguage','condition','working','location','destination','status'];
