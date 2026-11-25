@@ -1,9 +1,9 @@
 import * as shared from './supabase-catalog.js?v=1.4.3';
 import {vocabularyFor} from './vocabulary.js?v=1.4.2';
 import {attachCombo,closePicker} from './combo.js?v=1.4.2';
-import {refreshFromInventory,readInventory} from './inventory.js?v=1.4.2';
+import {refreshFromInventory,readInventory} from './inventory.js?v=1.5.4';
 import {centralFields,fields,fieldMap,bulkFields,manufactureFields,standaloneDocumentFields,optionalFields,observationFields} from './schema.js?v=1.4.2';
-import {emptyCatalog,newRecord,identificationDraft,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js?v=1.4.2';
+import {emptyCatalog,newRecord,identificationDraft,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js?v=1.5.4';
 import {readLocal,writeLocal,download} from './storage.js?v=1.4.2';
 import * as github from './github.js?v=1.4.2';
 import {prepareImage,rotateImage} from './media.js?v=1.4.2';
