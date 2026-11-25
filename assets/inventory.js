@@ -1,6 +1,6 @@
-import {emptyCatalog,newRecord,normalize,parseCatalog,saveRecord} from './core.js?v=1.4.2';
+import {emptyCatalog,newRecord,normalize,parseCatalog,saveRecord} from './core.js?v=1.5.4';
 import {requiredFields} from './schema.js?v=1.4.2';
-import {INVENTORY_ENDPOINT,inventoryPhoto} from './inventory-source.js?v=1.4.2';
+import {INVENTORY_ENDPOINT,inventoryPhoto} from './inventory-source.js?v=1.5.4';
 export {INVENTORY_ENDPOINT};
 const isMachine=value=>/^maquinas? (?:de )?escribir$/.test(normalize(value).trim().replace(/\s+/g,' '));
 const text=value=>value==null?'':String(value);
@@ -40,7 +40,7 @@ export function incorporateInventory(catalog=emptyCatalog(),items){
       else if(previous&&r[key]!==value&&previous[key]!==value)summary.conflicts.push({inventory:item.code,field:key});
     }
     // Keep original numeration separate: it may be a serial OR a collector's number.
-    const photoCount=Number.isInteger(item.photo_count)&&item.photo_count>=1&&item.photo_count<=8?item.photo_count:1;
+    const photoCount=Number.isSafeInteger(item.photo_count)&&item.photo_count>=1?item.photo_count:1;
     const oldCount=r.inventorySource?.photoCount||0;
     for(let index=oldCount+1;index<=photoCount;index++){
       const id=`inventory-${item.code}-${index}`;
