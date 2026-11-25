@@ -22,3 +22,5 @@
 @media(max-width:1000px) and (min-width:701px){.workspace{grid-template-columns:minmax(0,1.6fr) minmax(240px,1fr)}.entry,.media{padding:20px}.entry .field-grid{grid-template-columns:1fr}.entry .identification-heading h3{font-size:26px}}
 @media(max-width:700px){.entry .field-grid{gap:16px}.entry .identification-heading h3{font-size:26px}.media .image-stage{height:220px}.record-source{font-size:13px}.editor-top .eyebrow{font-size:11px}.editor-top h2{font-size:21px}.editor-bottom>div{flex-wrap:wrap}.editor-bottom #editor-backup{flex:0 0 auto}.editor-bottom #save-next{flex:1}.editor-bottom #save-record{flex-basis:100%}}
 @media(max-width:460px){.entry .field-grid{grid-template-columns:1fr}.editor-top{align-items:start}.editor-top-actions{flex-direction:column;align-items:end}}
+
+.catalog-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px}.catalog-tabs button{font-size:.82rem;padding:7px 10px}.catalog-tabs button:disabled{opacity:.45}.field-control.wide>button{margin:4px 0;text-align:left}.field-control.wide>div>button{display:block;width:100%;margin:4px 0;text-align:left}
