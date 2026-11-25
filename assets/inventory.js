@@ -1,6 +1,6 @@
-import {emptyCatalog,newRecord,normalize,parseCatalog,saveRecord} from './core.js?v=1.3.0';
-import {requiredFields} from './schema.js?v=1.3.0';
-import {INVENTORY_ENDPOINT,inventoryPhoto} from './inventory-source.js?v=1.3.0';
+import {emptyCatalog,newRecord,normalize,parseCatalog,saveRecord} from './core.js?v=1.4.2';
+import {requiredFields} from './schema.js?v=1.4.2';
+import {INVENTORY_ENDPOINT,inventoryPhoto} from './inventory-source.js?v=1.4.2';
 export {INVENTORY_ENDPOINT};
 const isMachine=value=>/^maquinas? (?:de )?escribir$/.test(normalize(value).trim().replace(/\s+/g,' '));
 const text=value=>value==null?'':String(value);
