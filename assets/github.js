@@ -1,4 +1,4 @@
-import {parseCatalog,serialize} from './core.js';
+import {parseCatalog,serialize} from './core.js?v=1.3.0';
 export const REPO='frankhode/prodigo-catalogador-maquinas';
 export const PATH='data/catalogo.json';
 const endpoint=`https://api.github.com/repos/${REPO}/contents/${PATH}`;

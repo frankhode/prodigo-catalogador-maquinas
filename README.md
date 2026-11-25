@@ -26,35 +26,41 @@ Las fotos del inventario se guardan como enlaces a la consulta pública, con su 
 
 ## Primera carga
 
-1. Partir de **Actualizar inventario** para las máquinas ya inventariadas. Para una ficha adicional independiente, pulsar **Nueva máquina**. El número de ficha `M000001`, `M000002`… se genera dentro de este catálogo. No asigna un inventario patrimonial automáticamente: el campo **Identificador de inventario** admite los códigos existentes, por ejemplo `P000019`.
-2. Completar las secciones. Todos los campos editables tienen una lista con buscador: el botón junto al campo abre las opciones cargadas. Escribí en el buscador para filtrar o elegí **Agregar** si el valor es nuevo; al guardar la ficha queda disponible en la lista de ese campo. El número de serie y los identificadores son textos para conservar ceros y prefijos. Los años admiten `ca. 1916` y otras expresiones de incertidumbre.
+1. Partir de **Actualizar inventario** para las máquinas ya inventariadas. Para una ficha adicional independiente, pulsar **Nueva máquina**. El número de ficha `M000001`, `M000002`… se genera dentro de este catálogo. No asigna un inventario patrimonial automáticamente: el campo **Número de inventario** admite los códigos existentes, por ejemplo `P000019`.
+2. Completar la identificación central del objeto. Todos los campos editables tienen una lista con buscador: el botón junto al campo abre las opciones cargadas. Escribí en el buscador para filtrar o elegí **Agregar** si el valor es nuevo; al guardar la ficha queda disponible en la lista de ese campo. El número de serie y los identificadores son textos para conservar ceros y prefijos. Los años admiten `ca. 1916` y otras expresiones de incertidumbre.
 3. Agregar imágenes JPG, PNG o WebP. Se crean vistas de hasta 1600 px y miniaturas de 320 px. El original no se modifica ni se conserva dentro del JSON. Cada imagen admite vista, descripción, giro e indicación de principal. El visor permite zoom, arrastre y ampliación.
-4. **Guardar ficha** conserva la ficha en este navegador. La marca y el modelo son necesarios solamente para marcarla **Catalogada**. Las fichas incompletas pueden guardarse como **Borrador** o **En revisión**.
+4. **Guardar ficha** conserva la ficha en este navegador. Las fichas incompletas se pueden guardar. Se conserva el estado de catalogación que ya tuviera cada ficha.
 5. Al terminar: **Datos y respaldos → Descargar JSON**. El archivo incluye las imágenes agregadas optimizadas y los enlaces a las del inventario y permite recuperar la colección en otra computadora. Dentro de la ficha, **Respaldo JSON** también incluye los cambios todavía abiertos.
 
 La copia local se conserva en IndexedDB, ligada al navegador y a la dirección de la aplicación. Borrar los datos del sitio, usar otro perfil o cambiar la dirección no transporta esa copia. El JSON descargado y el guardado en GitHub son respaldos independientes y explícitos.
 
-## Campos de la ficha
+## Identificación central del objeto
 
-- **Identificación:** inventario, número de pieza del coleccionista, marca, modelo, comentario, tipo, funcionamiento mecánico/eléctrico/electrónico, serie y estado de catalogación.
-- **Fabricación y teclado:** fabricante, país, año del ejemplar, período de fabricación del modelo, fuente de datación, importador, idioma, distribución, tipografía, muestra de escritura y naipe / muestra de caracteres.
-- **Composición:** color, cuerpo, base, teclas, tapa, funda/estuche, pintura, carrete y cinta, manual, partes, gráficas, logo, dimensiones y peso.
-- **Conservación y ubicación:** conservación, funcionamiento actual, integridad, limpieza/intervenciones, ubicación, destino y tratamientos.
-- **Historia:** procedencia, adquisición y fecha, propietarios, historia y trayectoria.
-- **Documentación:** lista repetible de libros, publicidades, efímeras, garantías, facturas, diplomas, fotografías de época, postales, manuales u otros documentos, cada uno con fecha, referencia y notas.
-- **Museografía:** objetos asociados, precio histórico, equivalencia con fuente y fecha, propuesta museográfica, arte, notas y fuentes.
+La ficha abre directamente en una única pantalla, sin las siete pestañas anteriores. Incluye:
 
-Las definiciones y sugerencias están en `assets/schema.js`. Las listas aprendidas se guardan en `vocabularies` dentro del JSON. Incluyen todos los campos, los textos largos, los datos de documentos asociados y la vista/descripción de imágenes. Las opciones se recuperan también de las fichas ya cargadas, sin tener que migrarlas. Cada campo conserva su lista independiente; se evitan opciones duplicadas que sólo cambian mayúsculas, tildes o espacios. La selección reutiliza el texto guardado sin reescribir los registros anteriores.
+- Número de inventario (conserva el código P del inventario).
+- Denominación del objeto.
+- Marca, modelo y versión.
+- Número de serie y año de fabricación.
+- Color, idioma del teclado y país de fabricación.
+- Fotografía principal, seleccionable entre las imágenes de la pieza.
+- Colección.
 
-El botón junto al campo abre el buscador; **Alt+Flecha abajo** también lo abre (en campos cortos basta Flecha abajo). **Flechas arriba/abajo y Enter** eligen una opción; **Esc** cierra solamente la lista. Clic afuera también la cierra. El desplazamiento del formulario y la apertura del teclado móvil reubican la lista sin cerrarla. Los textos largos conservan sus saltos de línea. Se pueden agregar estados de catalogación y tipos de documento/vistas nuevos; los filtros de estado incluyen los valores cargados. El código P vinculado al inventario conserva su protección y no se reasigna desde una lista. Las expresiones de la ficha son transcripciones del catalogador; la app no verifica atribuciones ni dataciones históricas.
+Las fichas de máquinas parten de la denominación «Máquina de escribir». Versión y colección se completan al catalogar: las sugerencias no se asignan automáticamente. Los ejemplos de la referencia no reemplazan los códigos ni los datos de los ejemplares.
+
+Los valores de las antiguas secciones, incluidos documentos, notas y procedencias, siguen conservados en el JSON, las exportaciones y los guardados, aunque ya no se muestran en esta pantalla. La numeración original del inventario tampoco se convierte automáticamente en número de serie, porque puede representar otro número.
+
+Las definiciones y sugerencias están en `assets/schema.js`. Las listas aprendidas se guardan en `vocabularies` dentro del JSON. Incluyen los campos de identificación y la vista/descripción de imágenes. Se conservan además las listas anteriores. Las opciones se recuperan también de las fichas ya cargadas, sin tener que migrarlas. Cada campo conserva su lista independiente; se evitan opciones duplicadas que sólo cambian mayúsculas, tildes o espacios. La selección reutiliza el texto guardado sin reescribir los registros anteriores.
+
+El botón junto al campo abre el buscador; **Alt+Flecha abajo** también lo abre (en campos cortos basta Flecha abajo). **Flechas arriba/abajo y Enter** eligen una opción; **Esc** cierra solamente la lista. Clic afuera también la cierra. El desplazamiento del formulario y la apertura del teclado móvil reubican la lista sin cerrarla. Los textos largos conservan sus saltos de línea. Se pueden agregar nuevas opciones; los filtros de estado conservan los valores cargados anteriormente. El código P vinculado al inventario conserva su protección y no se reasigna desde una lista. Las expresiones de la ficha son transcripciones del catalogador; la app no verifica atribuciones ni dataciones históricas.
 
 ## Teclado, grilla y pendientes
 
-- **Enter:** siguiente campo; desde el último, pasa a la sección siguiente. En textos largos agrega una línea. **Tab / Shift+Tab:** recorrido habitual.
+- **Enter:** siguiente campo; desde el último, enfoca Guardar ficha. En textos largos agrega una línea. **Tab / Shift+Tab:** recorrido habitual.
 - **Ctrl+Enter** (Cmd+Enter en Mac): guardar y cerrar. **Ctrl+Shift+Enter:** guardar y siguiente máquina del recorrido. **Esc:** cerrar, con aviso si hay cambios sin guardar.
 - Buscar en todos los textos de las fichas y de sus documentos. Filtrar por marca, estado y campo vacío. Ordenar por ficha, marca/modelo, año o última edición.
 - Elegir cuatro tamaños de miniaturas y **Solo imágenes**. No se recortan las vistas de las máquinas.
-- **Completar un campo:** filtra las fichas vacías y permite recorrer los resultados, empezando en la sección correspondiente.
+- **Completar un campo:** filtra las fichas vacías y permite recorrer los resultados, en la pantalla de identificación.
 - Marcar fichas con sus casillas y usar **Editar seleccionadas** para aplicar un valor común. Los identificadores y las series se editan individualmente. La operación se valida completa antes de guardar.
 
 ## Guardado en GitHub

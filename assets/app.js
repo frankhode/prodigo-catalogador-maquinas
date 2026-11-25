@@ -1,13 +1,13 @@
-import {vocabularyFor} from './vocabulary.js';
-import {attachCombo,closePicker} from './combo.js?v=1.2.1';
-import {refreshFromInventory} from './inventory.js?v=1.2.1';
-import {groups,fields,fieldMap,documentFields,imageViews,requiredFields,bulkFields} from './schema.js';
-import {emptyCatalog,newRecord,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js';
-import {readLocal,writeLocal,download} from './storage.js';
-import * as github from './github.js';
-import {prepareImage,rotateImage} from './media.js';
+import {vocabularyFor} from './vocabulary.js?v=1.3.0';
+import {attachCombo,closePicker} from './combo.js?v=1.3.0';
+import {refreshFromInventory} from './inventory.js?v=1.3.0';
+import {centralFields,fields,fieldMap,bulkFields} from './schema.js?v=1.3.0';
+import {emptyCatalog,newRecord,identificationDraft,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js?v=1.3.0';
+import {readLocal,writeLocal,download} from './storage.js?v=1.3.0';
+import * as github from './github.js?v=1.3.0';
+import {prepareImage,rotateImage} from './media.js?v=1.3.0';
 const $=id=>document.getElementById(id);
-const state={catalog:emptyCatalog(),remoteSha:null,remoteDirty:false,localRevision:null,inventoryCheckedAt:null,selected:new Set(),draft:null,step:0,image:0,dirty:false,visible:[],queue:[],size:1,busy:false,zoom:1,x:0,y:0};
+const state={catalog:emptyCatalog(),remoteSha:null,remoteDirty:false,localRevision:null,inventoryCheckedAt:null,selected:new Set(),draft:null,image:0,dirty:false,visible:[],queue:[],size:1,busy:false,zoom:1,x:0,y:0};
 function node(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
 function option(value,label=value){const e=node('option','',label);e.value=value;return e;}
 function notice(message,error=false){$('notice').textContent=message;$('notice').classList.toggle('error',error);}
@@ -53,12 +53,12 @@ function card(r){
 function isDirty(){return state.draft&&state.dirty;}
 function closeEditor(){closePicker();if(state.busy)return;if(isDirty()&&!confirm('Hay cambios sin guardar en esta ficha. ¿Descartarlos?'))return;state.draft=null;state.dirty=false;$('editor').close();}
 function openRecord(id,queue){
-  state.draft=structuredClone(state.catalog.records.find(r=>r.id===id)||newRecord(state.catalog.records));state.dirty=false;
-  state.queue=queue||state.visible.map(r=>r.id);state.step=0;state.image=0;
-  if($('pending').value){const index=groups.findIndex(g=>g.fields.some(f=>f[0]===$('pending').value));if(index>=0)state.step=index;}
+  state.draft=identificationDraft(state.catalog.records.find(r=>r.id===id)||newRecord(state.catalog.records));state.dirty=false;
+  state.queue=queue||state.visible.map(r=>r.id);
+  state.image=Math.max(0,state.draft.images.findIndex(im=>im.id===state.draft.primaryImageId));
   $('editor-error').textContent='';$('record-id').textContent=`${state.draft.inventory||'SIN INVENTARIO'} · FICHA ${state.draft.id}`;$('editor-title').textContent=title(state.draft);$('delete-record').hidden=!id;
   $('record-source').hidden=!state.draft.inventorySource;$('record-source').textContent=`Inventario ${state.draft.inventory} · Solo lectura del origen. Los cambios de esta ficha se guardan en el JSON del catalogador.`;
-  renderStep();renderMedia();if(!$('editor').open)$('editor').showModal();focusField();
+  renderIdentification();renderMedia();if(!$('editor').open)$('editor').showModal();focusField();
 }
 function focusField(){requestAnimationFrame(()=>{$('fields').querySelector('input,select,textarea,button')?.focus({preventScroll:true});});}
 function markDirty(){state.dirty=true;}
@@ -66,27 +66,15 @@ function fieldControl(def,value,onchange,prefix='f'){
   const [key,label,type]=def;const wrapper=node('div','field-control'+(type==='area'?' wide':''));const caption=node('label');caption.htmlFor=`${prefix}-${key}`;caption.append(node('span','',label));wrapper.append(caption);
   const input=node(type==='area'?'textarea':'input');input.id=`${prefix}-${key}`;input.name=key;input.value=value||'';
   if(key==='inventory'&&state.draft?.inventorySource){input.readOnly=true;input.title='Código conservado del inventario de Pródigo';}
-  if(requiredFields.includes(key)&&prefix==='f'){caption.classList.add('required');input.setAttribute('aria-description','Necesario para marcar como catalogada');}
   input.addEventListener('input',()=>onchange(input.value));wrapper.append(input);
   const vocabularyKey=prefix.startsWith('doc-')?`document.${key}`:key;
   attachCombo(input,{label,getOptions:()=>vocabulary(vocabularyKey),onChange:onchange});return wrapper;
 }
-function renderStep(){
+function renderIdentification(){
   closePicker();
-  const group=groups[state.step];$('steps').replaceChildren(...groups.map((g,i)=>{const b=node('button',i===state.step?'active':'',`${i+1}. ${g.title}`);b.type='button';b.setAttribute('aria-current',i===state.step?'step':'false');b.onclick=()=>{state.step=i;renderStep();focusField();};return b;}));
-  $('step-counter').textContent=`SECCIÓN ${state.step+1} DE ${groups.length}`;$('step-title').textContent=group.title;
-  const form=$('fields');form.replaceChildren();form.className='';
-  if(group.id==='documentation'){renderDocs();}else{form.className='field-grid';for(const def of group.fields)form.append(fieldControl(def,state.draft[def[0]],v=>{state.draft[def[0]]=v;markDirty();}));if(group.id==='identification'){const hint=node('p','muted','* Marca y modelo son necesarios para marcar la ficha como catalogada.');hint.style.gridColumn='1 / -1';hint.style.fontSize='11px';form.append(hint);}}
-  $('prev-step').disabled=state.step===0;$('next-step').disabled=state.step===groups.length-1;
+  const form=$('fields');form.replaceChildren();
+  for(const def of centralFields)form.append(fieldControl(def,state.draft[def[0]],value=>{state.draft[def[0]]=value;markDirty();}));
   document.querySelector('.entry').scrollTo(0,0);
-}
-function renderDocs(){
-  const form=$('fields');if(!state.draft.documents.length)form.append(node('p','doc-empty','Libros, publicidades, efímeras, garantías y otros documentos vinculados a esta máquina.'));
-  state.draft.documents.forEach((doc,index)=>{const wrap=node('div','doc'),grid=node('div','field-grid');
-    for(const def of documentFields)grid.append(fieldControl(def,doc[def[0]],v=>{doc[def[0]]=v;markDirty();},`doc-${index}`));
-    const remove=node('button','danger subtle','Quitar documento');remove.type='button';remove.onclick=()=>{if(!confirm('¿Quitar este documento de la ficha?'))return;state.draft.documents.splice(index,1);markDirty();renderStep();};wrap.append(grid,remove);form.append(wrap);
-  });
-  const add=node('button','','＋ Agregar documento');add.type='button';add.onclick=()=>{state.draft.documents.push({type:'Libro',title:'',date:'',reference:'',notes:''});markDirty();renderStep();};form.append(add);
 }
 function currentImage(){return state.draft?.images[state.image];}
 function transformImage(){$('main-image').style.transform=`translate(${state.x}px,${state.y}px) scale(${state.zoom})`;}
@@ -131,10 +119,9 @@ function bind(){
   $('size').onclick=()=>{state.size=(state.size+1)%4;render();};
   $('select-all').onclick=()=>{state.visible.forEach(r=>state.selected.add(r.id));render();};$('select-none').onclick=()=>{state.selected.clear();render();};
   $('review-start').onclick=()=>{const queue=state.visible.filter(r=>!state.selected.size||state.selected.has(r.id)).map(r=>r.id);if(queue.length)openRecord(queue[0],queue);else notice('No hay máquinas que coincidan con los filtros.');};
-  $('prev-step').onclick=()=>{if(state.step>0){state.step--;renderStep();focusField();}};$('next-step').onclick=()=>{if(state.step<groups.length-1){state.step++;renderStep();focusField();}};
   $('save-record').onclick=()=>action(()=>persistDraft(),'editor-error');$('save-next').onclick=()=>action(()=>persistDraft(true),'editor-error');
   $('fields').onsubmit=e=>e.preventDefault();
-  $('fields').onkeydown=e=>{if(e.key!=='Enter'||e.ctrlKey||e.metaKey||e.shiftKey||e.isComposing||e.target.tagName==='TEXTAREA'||e.target.tagName==='BUTTON')return;e.preventDefault();const inputs=[...$('fields').querySelectorAll('input,select,textarea')].filter(input=>!input.closest('.value-picker')&&!input.disabled);const next=inputs[inputs.indexOf(e.target)+1];if(next)next.focus();else if(state.step<groups.length-1){state.step++;renderStep();focusField();}else $('save-record').focus();};
+  $('fields').onkeydown=e=>{if(e.key!=='Enter'||e.ctrlKey||e.metaKey||e.shiftKey||e.isComposing||e.target.tagName==='TEXTAREA'||e.target.tagName==='BUTTON')return;e.preventDefault();const inputs=[...$('fields').querySelectorAll('input,select,textarea')].filter(input=>!input.closest('.value-picker')&&!input.disabled);const next=inputs[inputs.indexOf(e.target)+1];if(next)next.focus();else $('save-record').focus();};
   $('editor').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();action(()=>persistDraft(e.shiftKey),'editor-error');}});
   $('delete-record').onclick=()=>action(async()=>{if(!confirm(`¿Eliminar ${state.draft.id} y todas sus imágenes? Esta acción se aplica a la copia local.`))return;const c=structuredClone(state.catalog);c.records=c.records.filter(r=>r.id!==state.draft.id);c.updatedAt=new Date().toISOString();await commit(c);state.draft=null;state.dirty=false;$('editor').close();notice('Ficha eliminada de la copia local.');},'editor-error');
   $('image-files').onchange=()=>{const files=[...$('image-files').files];$('image-files').value='';action(async()=>{let added=0;try{for(const file of files){$('editor-error').textContent=`Preparando imagen ${added+1} de ${files.length}…`;const im=await prepareImage(file);state.draft.images.push(im);state.image=state.draft.images.length-1;if(!state.draft.primaryImageId)state.draft.primaryImageId=im.id;markDirty();added++;}}finally{renderMedia();}$('editor-error').textContent='';},'editor-error');};
@@ -162,7 +149,7 @@ function bind(){
 function bulkOptions(){closePicker();}
 async function init(){
   state.busy=true;document.body.classList.add('busy');
-  $('pending').append(...fields.filter(f=>f[0]!=='status').map(f=>option(f[0],f[1])));$('bulk-field').append(...bulkFields.map(k=>option(k,fieldMap.get(k)[1])));attachCombo($('image-view'),{label:'Vista de imagen',getOptions:()=>vocabulary('image.view'),onChange:value=>{if(currentImage()){currentImage().view=value;markDirty();renderMedia();}}});
+  $('pending').append(...centralFields.map(f=>option(f[0],f[1])));$('bulk-field').append(...bulkFields.map(k=>option(k,fieldMap.get(k)[1])));attachCombo($('image-view'),{label:'Vista de imagen',getOptions:()=>vocabulary('image.view'),onChange:value=>{if(currentImage()){currentImage().view=value;markDirty();renderMedia();}}});
   attachCombo($('image-caption'),{label:'Descripción de imagen',getOptions:()=>vocabulary('image.caption'),onChange:value=>{if(currentImage()){currentImage().caption=value;markDirty();}}});
   attachCombo($('bulk-value'),{label:'Valor para seleccionadas',getOptions:()=>vocabulary($('bulk-field').value),onChange:()=>{}});bind();
   try{const saved=await readLocal();if(saved){state.localRevision=saved.revision||null;state.catalog=parseCatalog(saved.catalog);state.remoteSha=saved.remoteSha||null;state.remoteDirty=Boolean(saved.remoteDirty);}else{try{const remote=await github.readRemote();await commit(remote.catalog,{sha:remote.sha,remoteDirty:false});}catch{notice('Catálogo vacío. Podés crear fichas o importar un JSON.');}}}catch(e){notice(`No se pudo recuperar la copia local: ${e.message}. Podés importar un respaldo.`,true);}

@@ -1,10 +1,16 @@
-import {rememberRecordTerms} from './vocabulary.js';
-import {safeInventoryImage} from './inventory-source.js';
-import {fields, requiredFields} from './schema.js';
+import {rememberRecordTerms} from './vocabulary.js?v=1.3.0';
+import {safeInventoryImage} from './inventory-source.js?v=1.3.0';
+import {fields, requiredFields} from './schema.js?v=1.3.0';
 export const FORMAT='prodigo-catalogador-maquinas';
 export function emptyCatalog(){return {format:FORMAT,schemaVersion:1,updatedAt:null,records:[],vocabularies:{}};}
 export function normalize(s){return String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('es');}
-export function newRecord(records=[]){let n=1;const ids=new Set(records.map(r=>r.id));while(ids.has(`M${String(n).padStart(6,'0')}`))n++;return {id:`M${String(n).padStart(6,'0')}`,status:'Borrador',images:[],documents:[],primaryImageId:'',createdAt:new Date().toISOString()};}
+export function newRecord(records=[]){let n=1;const ids=new Set(records.map(r=>r.id));while(ids.has(`M${String(n).padStart(6,'0')}`))n++;return {id:`M${String(n).padStart(6,'0')}`,status:'Borrador',denomination:'Máquina de escribir',images:[],documents:[],primaryImageId:'',createdAt:new Date().toISOString()};}
+// Editing the new screen preserves every earlier property and linked inventory code.
+export function identificationDraft(record){
+  const draft=structuredClone(record);
+  if(draft.denomination==null)draft.denomination='Máquina de escribir';
+  return draft;
+}
 export function title(r){return [r.brand,r.model].filter(Boolean).join(' ')||'Máquina sin identificar';}
 export function missing(r){return requiredFields.filter(k=>!String(r[k]??'').trim());}
 export function validateRecord(r,others=[]){

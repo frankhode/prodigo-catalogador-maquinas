@@ -1,5 +1,5 @@
-import {installPickerEvents} from './picker-events.js';
-import {matchingTerms,termKey} from './vocabulary.js';
+import {installPickerEvents} from './picker-events.js?v=1.3.0';
+import {matchingTerms,termKey} from './vocabulary.js?v=1.3.0';
 let activePicker=null,initialized=false,layoutFrame=0;
 function repositionPicker(){
   if(layoutFrame||!activePicker)return;

@@ -1,4 +1,4 @@
-export const groups = [
+const previousGroups = [
   {id:'identification', title:'Identificación', fields:[
     ['inventory','Identificador de inventario','text'], ['inventoryOriginalNumber','Numeración original del inventario (serie / otro número)','text'], ['pieceNumber','Nº de pieza del coleccionista','text'],
     ['brand','Marca','combo',['Underwood','Remington','Royal','Olivetti','Olympia','Smith Corona','Adler','Hermes','Brother']],
@@ -41,10 +41,26 @@ export const groups = [
     ['notes','Notas generales','area'], ['sources','Fuentes y referencias de la ficha','area']
   ]}
 ];
-export const fields = groups.flatMap(g=>g.fields);
+// Keep earlier data definitions for JSON compatibility; they no longer create screens.
+export const centralFields = [
+  ['inventory','Número de inventario','text'],
+  ['denomination','Denominación del objeto','combo',['Máquina de escribir']],
+  ['brand','Marca','combo',['Underwood','Remington','Royal','Olivetti','Olympia','Smith Corona','Adler','Hermes','Brother']],
+  ['model','Modelo','combo'],
+  ['version','Versión','combo',['Por determinar']],
+  ['serial','Número de serie','text'],
+  ['year','Año de fabricación','text'],
+  ['color','Color','combo',['Negro','Gris','Beige','Verde','Azul','Rojo']],
+  ['keyboardLanguage','Idioma del teclado','combo',['Español','Inglés','Francés','Alemán','Italiano','Portugués']],
+  ['country','País de fabricación','combo',['Argentina','Estados Unidos','Italia','Alemania','Reino Unido','Francia','Suiza','Japón','España']],
+  ['collection','Colección','combo',['Patrimonio mecanográfico']]
+];
+const centralKeys=new Set(centralFields.map(([key])=>key));
+export const legacyFields=previousGroups.flatMap(g=>g.fields).filter(([key])=>!centralKeys.has(key));
+export const fields=[...centralFields,...legacyFields];
 export const fieldMap = new Map(fields.map(f=>[f[0],f]));
 export const documentTypes=['Libro','Publicidad','Efímera','Garantía','Factura de compra','Diploma','Fotografía de época','Postal','Manual','Otro'];
 export const documentFields=[['type','Tipo de documento','select',documentTypes],['title','Título / descripción','text'],['date','Fecha','text'],['reference','Referencia / ubicación / enlace','text'],['notes','Notas','area']];
 export const imageViews=['General','Frente','Reverso','Lateral','Detalle','Número de serie','Teclado','Documentación','Otro'];
 export const requiredFields=['brand','model'];
-export const bulkFields=['brand','model','manufacturer','country','type','mechanism','color','keyboardLanguage','condition','working','location','destination','status'];
+export const bulkFields=['denomination','brand','model','version','year','color','keyboardLanguage','country','collection'];
