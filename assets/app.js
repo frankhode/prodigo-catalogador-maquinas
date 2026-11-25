@@ -63,11 +63,13 @@ function openRecord(id,queue){
 function focusField(){requestAnimationFrame(()=>{$('fields').querySelector('input,select,textarea,button')?.focus({preventScroll:true});});}
 function markDirty(){state.dirty=true;}
 function fieldControl(def,value,onchange,prefix='f'){
+  const locked=prefix==='f'&&![0,1,4].includes(state.tab);
   const [key,label,type]=def;const mandatory=prefix==='f'&&state.tab===0&&(state.draft?.recordKind==='document'?['documentType','documentTitle']:['inventory','denomination','brand','model']).includes(key);const wrapper=node('div','field-control'+(type==='area'?' wide':''));const caption=node('label');caption.htmlFor=`${prefix}-${key}`;caption.append(node('span','',label+(mandatory?' *':'')));wrapper.append(caption);
   const input=node(type==='area'?'textarea':'input');input.id=`${prefix}-${key}`;input.name=key;input.value=value||'';
   if(key==='inventory'&&state.draft?.inventorySource){input.readOnly=true;input.title='Código conservado del inventario de Pródigo';}
   input.addEventListener('input',()=>onchange(input.value));wrapper.append(input);
   const vocabularyKey=prefix.startsWith('doc-')?`document.${key}`:key;
+  if(locked){input.disabled=true;return wrapper;}
   if(!key.startsWith('observations'))attachCombo(input,{label,getOptions:()=>vocabulary(vocabularyKey),onChange:onchange});else input.rows=5;return wrapper;
 }
 const tabs=['Identificación','Fabricación','Comercialización','Procedencia y trayectoria','Documentación','Conservación','Museografía','Gestión y validación'];
@@ -88,8 +90,8 @@ function renderDocuments(form){
 function renderIdentification(){
   closePicker();
   const form=$('fields');form.replaceChildren();
-  let nav=$('catalog-tabs');if(!nav){nav=node('nav','catalog-tabs');nav.id='catalog-tabs';form.before(nav);}nav.replaceChildren();for(const [i,label] of tabs.entries()){const b=node('button',state.tab===i?'primary':'',String(i+1)+'. '+label);b.type='button';b.disabled=state.draft.recordKind==='document'&&i===1;b.onclick=()=>{state.tab=i;renderIdentification();};nav.append(b);}
- $('identification-title').textContent=tabs[state.tab||0]+(state.tab===0?' · Obligatoria':' · Optativa');
+  let nav=$('catalog-tabs');if(!nav){nav=node('nav','catalog-tabs');nav.id='catalog-tabs';form.before(nav);}nav.replaceChildren();for(const [i,label] of tabs.entries()){const b=node('button',state.tab===i?'primary':'',String(i+1)+'. '+label);if(![0,1,4].includes(i)){b.classList.add('preview-tab');b.title='Solo consulta';}b.type='button';b.disabled=state.draft.recordKind==='document'&&i===1;b.onclick=()=>{state.tab=i;renderIdentification();};nav.append(b);}
+ $('identification-title').textContent=tabs[state.tab||0]+(state.tab===0?' · Obligatoria':[1,4].includes(state.tab)?' · Optativa':' · Solo consulta');
  if(state.tab===4)renderDocuments(form);else for(const def of (state.tab===0?(state.draft.recordKind==='document'?standaloneDocumentFields:centralFields):state.tab===1?manufactureFields:optionalFields[state.tab]))form.append(fieldControl(def,state.draft[def[0]],value=>{state.draft[def[0]]=value;markDirty();}));
   const note=observationFields[state.tab||0];form.append(fieldControl(note,state.draft[note[0]],value=>{state.draft[note[0]]=value;markDirty();}));
   document.querySelector('.entry').scrollTo(0,0);
@@ -168,7 +170,7 @@ function bind(){
 function bulkOptions(){closePicker();}
 async function init(){
   state.busy=true;document.body.classList.add('busy');
-  $('pending').append(...[...new Map([...centralFields,...manufactureFields,...standaloneDocumentFields,...optionalFields.flat()].map(f=>[f[0],f])).values()].map(f=>option(f[0],f[1])));$('bulk-field').append(...bulkFields.map(k=>option(k,fieldMap.get(k)[1])));attachCombo($('image-view'),{label:'Vista de imagen',getOptions:()=>vocabulary('image.view'),onChange:value=>{if(currentImage()){currentImage().view=value;markDirty();renderMedia();}}});
+  $('pending').append(...[...new Map([...centralFields,...manufactureFields,...standaloneDocumentFields,].map(f=>[f[0],f])).values()].map(f=>option(f[0],f[1])));$('bulk-field').append(...bulkFields.map(k=>option(k,fieldMap.get(k)[1])));attachCombo($('image-view'),{label:'Vista de imagen',getOptions:()=>vocabulary('image.view'),onChange:value=>{if(currentImage()){currentImage().view=value;markDirty();renderMedia();}}});
   attachCombo($('image-caption'),{label:'Descripción de imagen',getOptions:()=>vocabulary('image.caption'),onChange:value=>{if(currentImage()){currentImage().caption=value;markDirty();}}});
   attachCombo($('bulk-value'),{label:'Valor para seleccionadas',getOptions:()=>vocabulary($('bulk-field').value),onChange:()=>{}});bind();
   try{const saved=await readLocal();if(saved){state.localRevision=saved.revision||null;state.catalog=parseCatalog(saved.catalog);state.remoteSha=saved.remoteSha||null;state.remoteDirty=Boolean(saved.remoteDirty);}else{try{const remote=await github.readRemote();await commit(remote.catalog,{sha:remote.sha,remoteDirty:false});}catch{notice('Catálogo vacío. Podés crear fichas o importar un JSON.');}}}catch(e){notice(`No se pudo recuperar la copia local: ${e.message}. Podés importar un respaldo.`,true);}
