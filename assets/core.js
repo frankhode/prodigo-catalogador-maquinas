@@ -11,8 +11,8 @@ export function identificationDraft(record){
   if(draft.denomination==null)draft.denomination='Máquina de escribir';
   return draft;
 }
-export function title(r){return [r.brand,r.model].filter(Boolean).join(' ')||'Máquina sin identificar';}
-export function missing(r){return requiredFields.filter(k=>!String(r[k]??'').trim());}
+export function title(r){if(r.recordKind==='document')return r.documentTitle||r.documentType||'Documento sin identificar';return [r.brand,r.model].filter(Boolean).join(' ')||'Máquina sin identificar';}
+export function missing(r){return (r.recordKind==='document'?['documentTitle','documentType']:requiredFields).filter(k=>!String(r[k]??'').trim());}
 export function validateRecord(r,others=[]){
   if(!r.id)throw Error('Falta el número de ficha.');
   if(r.inventorySource&&(r.inventorySource.system!=='prodigo-inventario'||r.inventorySource.code!==r.inventory))throw Error('El código P de una máquina vinculada al inventario no se puede cambiar.');
