@@ -8,7 +8,7 @@ import {readLocal,writeLocal,download} from './storage.js?v=1.4.2';
 import * as github from './github.js?v=1.4.2';
 import {prepareImage,rotateImage} from './media.js?v=1.4.2';
 const $=id=>document.getElementById(id);
-const state={catalog:emptyCatalog(),remoteSha:null,remoteDirty:false,localRevision:null,inventoryCheckedAt:null,selected:new Set(),draft:null,image:0,dirty:false,visible:[],queue:[],size:1,busy:false,zoom:1,x:0,y:0};
+const state={catalog:emptyCatalog(),remoteSha:null,remoteDirty:false,sharedReady:false,localRevision:null,inventoryCheckedAt:null,selected:new Set(),draft:null,image:0,dirty:false,visible:[],queue:[],size:1,busy:false,zoom:1,x:0,y:0};
 function node(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
 function option(value,label=value){const e=node('option','',label);e.value=value;return e;}
 function notice(message,error=false){$('notice').textContent=message;$('notice').classList.toggle('error',error);}
@@ -24,7 +24,7 @@ async function commit(catalog,{sha=state.remoteSha,remoteDirty=true}={}){
 function vocabulary(key){return vocabularyFor(state.catalog,key,state.draft);}
 function filters(){return {q:$('search').value,brand:$('brand-filter').value,status:$('status-filter').value,pending:$('pending').value};}
 function render(){
-  const c=state.catalog;$('total').textContent=c.records.length;$('complete').textContent=c.records.filter(r=>r.status==='Catalogada').length;$('drafts').textContent=c.records.filter(r=>r.status!=='Catalogada').length;
+  const c=state.catalog;$('new').hidden=true;$('empty-new').hidden=true;$('total').textContent=c.records.length;$('complete').textContent=c.records.filter(r=>r.status==='Catalogada').length;$('drafts').textContent=c.records.filter(r=>r.status!=='Catalogada').length;
   const prev=$('brand-filter').value;$('brand-filter').replaceChildren(option('','Todas las marcas'),...[...new Set(c.records.map(r=>r.brand).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')).map(v=>option(v)));$('brand-filter').value=prev;
   const status=$('status-filter').value;$('status-filter').replaceChildren(option('','Todos los estados'),...vocabulary('status').map(v=>option(v)));$('status-filter').value=status;
   const visible=filterRecords(c.records,filters());const sort=$('sort').value;
@@ -35,13 +35,13 @@ function render(){
   });state.visible=visible;
   const visibleIds=new Set(visible.map(r=>r.id));for(const id of state.selected)if(!visibleIds.has(id))state.selected.delete(id);
   $('count').textContent=`${visible.length} de ${c.records.length} objetos${state.selected.size?` · ${state.selected.size} seleccionadas`:''}`;
-  $('bulk-open').disabled=!state.selected.size;
+  $('bulk-open').disabled=!state.sharedReady||!state.selected.size;
   $('gallery').replaceChildren(...visible.map(card));$('gallery').classList.toggle('images-only',$('images-only').checked);
   $('gallery').style.setProperty('--card-size',['155px','230px','320px','440px'][state.size]);$('size').textContent=`Miniaturas: ${['pequeñas','medianas','grandes','muy grandes'][state.size]}`;
-  $('empty').hidden=visible.length>0;$('empty-title').textContent=c.records.length?'Sin coincidencias':'La colección empieza acá';$('empty-text').textContent=c.records.length?'Probá con otros filtros o términos.':'Leé las máquinas del inventario o recuperá tu catálogo JSON.';$('empty-new').hidden=c.records.length>0;
-  $('storage-status').textContent=`Copia local${c.updatedAt?` · ${new Date(c.updatedAt).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'})}`:''}${state.remoteDirty?' · cambios sin guardar en GitHub':''}`;
+  $('empty').hidden=visible.length>0;$('empty-title').textContent=c.records.length?'Sin coincidencias':'La colección empieza acá';$('empty-text').textContent=c.records.length?'Probá con otros filtros o términos.':'Leé las máquinas del inventario o recuperá tu catálogo JSON.';$('empty-new').hidden=true;
+  $('storage-status').textContent=`${state.sharedReady?'Supabase conectado':'Supabase sin conexión'} · copia local${c.updatedAt?` · ${new Date(c.updatedAt).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'})}`:''}`;
   $('github-state').textContent=`${github.connected()?'Conectado para escritura':'Sin conexión de escritura'}${state.remoteSha?' · versión de partida leída':''}`;
-  $('save-online').textContent=state.remoteDirty?'Guardar JSON en GitHub':'JSON en GitHub';
+  $('save-online').textContent='Actualizar catálogo';
   $('connect-github').textContent=github.connected()?'Desconectar GitHub':'Conectar GitHub';
 }
 function card(r){
@@ -54,11 +54,13 @@ function card(r){
 function isDirty(){return state.draft&&state.dirty;}
 function closeEditor(){closePicker();if(state.busy)return;if(isDirty()&&!confirm('Hay cambios sin guardar en esta ficha. ¿Descartarlos?'))return;state.draft=null;state.dirty=false;$('editor').close();}
 function openRecord(id,queue){
+  if(!state.sharedReady){notice('Conectá Supabase antes de catalogar. Ingresá al inventario y actualizá.',true);return;}
+  if(!id){notice('Inventariá el objeto primero en la app de inventario.',true);return;}
   state.draft=identificationDraft(state.catalog.records.find(r=>r.id===id)||newRecord(state.catalog.records));state.dirty=false;state.tab=0;state.pendingDocs=[];
   state.queue=queue||state.visible.map(r=>r.id);
   state.image=Math.max(0,state.draft.images.findIndex(im=>im.id===state.draft.primaryImageId));
-  $('editor-error').textContent='';$('record-id').textContent=`${state.draft.inventory||'SIN INVENTARIO'} · FICHA ${state.draft.id}`;$('editor-title').textContent=title(state.draft);$('delete-record').hidden=!id;
-  $('record-source').hidden=!state.draft.inventorySource;$('record-source').textContent=`Inventario ${state.draft.inventory} · Solo lectura del origen. Los cambios de esta ficha se guardan en el JSON del catalogador.`;
+  $('editor-error').textContent='';$('record-id').textContent=`${state.draft.inventory||'SIN INVENTARIO'} · FICHA ${state.draft.id}`;$('editor-title').textContent=title(state.draft);$('delete-record').hidden=true;
+  $('record-source').hidden=!state.draft.inventorySource;$('record-source').textContent=`Inventario ${state.draft.inventory} · Solo lectura del origen. Los cambios catalográficos se guardan en Supabase.`;
   renderIdentification();renderMedia();if(!$('editor').open)$('editor').showModal();focusField();
 }
 function focusField(){requestAnimationFrame(()=>{$('fields').querySelector('input,select,textarea,button')?.focus({preventScroll:true});});}
@@ -67,7 +69,7 @@ function fieldControl(def,value,onchange,prefix='f'){
   const locked=prefix==='f'&&![0,1,4].includes(state.tab);
   const [key,label,type]=def;const mandatory=prefix==='f'&&state.tab===0&&(state.draft?.recordKind==='document'?['documentType','documentTitle']:['inventory','denomination','brand','model']).includes(key);const wrapper=node('div','field-control'+(type==='area'?' wide':''));const caption=node('label');caption.htmlFor=`${prefix}-${key}`;caption.append(node('span','',label+(mandatory?' *':'')));wrapper.append(caption);
   const input=node(type==='area'?'textarea':'input');input.id=`${prefix}-${key}`;input.name=key;input.value=value||'';
-  if(key==='inventory'&&state.draft?.inventorySource){input.readOnly=true;input.title='Código conservado del inventario de Pródigo';}
+  if(key==='inventory'){input.readOnly=true;input.title='Código conservado del inventario de Pródigo';}
   input.addEventListener('input',()=>onchange(input.value));wrapper.append(input);
   const vocabularyKey=prefix.startsWith('doc-')?`document.${key}`:key;
   if(locked){input.disabled=true;return wrapper;}
@@ -110,9 +112,9 @@ function renderMedia(){
 async function persistDraft(next=false){
   const r=structuredClone(state.draft);for(const [key] of fields)if(typeof r[key]==='string')r[key]=r[key].trim();
   const required=r.recordKind==='document'?['documentType','documentTitle']:['inventory','denomination','brand','model'];const absent=required.filter(k=>!String(r[k]||'').trim());if(absent.length){state.tab=0;renderIdentification();throw Error('Completá los campos de identificación obligatorios: '+absent.map(k=>fieldMap.get(k)?.[1]||k).join(', ')+'.');}r.status='Catalogada';
-  validateRecord(r,state.catalog.records);let catalog=state.catalog;for(const doc of state.pendingDocs||[])if(r.documents.some(d=>d.targetId===doc.id))catalog=saveRecord(catalog,doc);await commit(saveRecord(catalog,r));state.dirty=false;
+  validateRecord(r,state.catalog.records);await saveProduction(saveRecord(state.catalog,r),[r]);state.dirty=false;
   const index=state.queue.indexOf(r.id);const nextId=index>=0?state.queue[index+1]:null;
-  if(next&&nextId&&nextId!==r.id){openRecord(nextId,state.queue);}else{state.draft=null;$('editor').close();notice(next?'Ficha guardada. Terminaste el recorrido.':'Ficha guardada en la copia local.');}
+  if(next&&nextId&&nextId!==r.id){openRecord(nextId,state.queue);}else{state.draft=null;$('editor').close();notice(next?'Ficha guardada. Terminaste el recorrido.':'Ficha guardada en Supabase.');}
 }
 function exportCatalog(){let c=state.catalog;if(state.draft&&state.dirty){const draft=structuredClone(state.draft);draft.status=missing(draft).length?'Borrador':draft.status;for(const doc of state.pendingDocs||[])if(draft.documents.some(d=>d.targetId===doc.id))c=saveRecord(c,doc);c=saveRecord(c,draft);}download(serialize(c),`prodigo-maquinas-${new Date().toLocaleDateString('en-CA')}.json`);}
 async function refreshInventory(){
@@ -123,7 +125,7 @@ async function refreshInventory(){
     const s=result.summary;state.inventoryCheckedAt=result.checkedAt;
     const checked=new Date(result.checkedAt).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'medium'});
     $('inventory-state').textContent=`Consultado ${checked} · ${s.sourceCount} máquinas en Museo · ${s.added} nuevas · ${s.updated} actualizadas${s.notPresent?` · ${s.notPresent} fichas previas conservadas fuera de la lectura actual`:''}`;
-    notice(`Inventario leído. ${s.conflicts.length?`${s.conflicts.length} diferencias conservan tu edición del catalogador. `:''}${state.remoteDirty?'Guardá el JSON en GitHub para compartir los cambios.':'El JSON está al día.'}`);
+    notice('Inventario actualizado.');
   }catch(e){$('inventory-state').textContent='Inventario no disponible. Tu catálogo JSON se conserva.';throw e;}
 }
 function requestGithubConnection(){state.saveAfterConnect=true;$('token').value='';$('connection-error').textContent='';$('connection').showModal();}
@@ -136,11 +138,30 @@ function sharedPayload(r,catalog){
   payload.documents=(payload.documents||[]).map(d=>{if(!d.targetId)return d;const target=catalog.records.find(x=>x.id===d.targetId);const code=target?.inventory||d.targetId;if(!/^P[0-9]{6}$/.test(code))throw Error('La ficha '+r.inventory+' tiene una relación sin número P definitivo.');return {...d,targetId:code};});
   return payload;
 }
+async function loadProduction(){
+  state.sharedReady=false;
+  const rows=await shared.readShared(),c=structuredClone(state.catalog);
+  c.sharedRevisions={};
+  for(const row of rows){const existing=c.records.find(r=>r.inventory===row.inventory_code);const record={...(existing||newRecord(c.records)),...row.payload,inventory:row.inventory_code};if(existing)c.records[c.records.indexOf(existing)]=record;else c.records.push(record);c.sharedRevisions[row.inventory_code]=row.revision;}
+  await commit(parseCatalog(c),{remoteDirty:false});state.sharedReady=true;render();
+  $('shared-state').textContent=rows.length+' fichas compartidas · conexión activa.';
+}
+async function saveProduction(c,records){
+  if(!state.sharedReady)throw Error('Conexión al catálogo compartido no confirmada.');
+  c.sharedRevisions??={};
+  const entries=records.map(r=>({code:r.inventory,revision:c.sharedRevisions[r.inventory]||0,payload:sharedPayload(r,c)}));
+  if(entries.some(e=>!/^P[0-9]{6}$/.test(e.code||'')))throw Error('Cada ficha debe tener un número P definitivo.');
+  const saved=await shared.writeShared(entries);
+  if(!Array.isArray(saved)||saved.length!==entries.length)throw Error('No se pudo confirmar el guardado en Supabase.');
+  for(const row of saved)c.sharedRevisions[row.inventory_code]=row.revision;
+  try{await commit(c,{remoteDirty:false});}catch(e){state.catalog=c;state.sharedReady=false;throw Error('Supabase confirmó el guardado, pero falló la copia local. Recargá antes de continuar.');}
+}
+async function refreshProduction(){await refreshInventory();await loadProduction();notice('Inventario y catálogo compartido actualizados.');}
 function bind(){
-  $('shared-read').onclick=()=>action(async()=>{const rows=await shared.readShared();if(!rows.length){$('shared-state').textContent='Catálogo compartido vacío.';return;}if(!confirm('¿Recuperar '+rows.length+' fichas de Supabase? Se reemplazarán los datos catalográficos locales correspondientes. Descargá antes un respaldo si tenés cambios.'))return;const c=structuredClone(state.catalog);c.sharedRevisions??={};for(const row of rows){const existing=c.records.find(r=>r.inventory===row.inventory_code);const record={...(existing||newRecord(c.records)),...row.payload,inventory:row.inventory_code};if(existing)c.records[c.records.indexOf(existing)]=record;else c.records.push(record);c.sharedRevisions[row.inventory_code]=row.revision;}await commit(parseCatalog(c));$('shared-state').textContent=rows.length+' fichas recuperadas.';},'data-error');
-  $('shared-write').onclick=()=>action(async()=>{const c=structuredClone(state.catalog);const records=c.records.filter(r=>r.status==='Catalogada'&&/^P[0-9]{6}$/.test(r.inventory||''));if(!records.length)throw Error('No hay fichas catalogadas con número P definitivo.');if(!confirm('¿Guardar '+records.length+' fichas catalogadas en Supabase? No modifica el inventario.'))return;c.sharedRevisions??={};const entries=records.map(r=>({code:r.inventory,revision:c.sharedRevisions[r.inventory]||0,payload:sharedPayload(r,c)}));const saved=await shared.writeShared(entries);for(const row of saved)c.sharedRevisions[row.inventory_code]=row.revision;await commit(c);$('shared-state').textContent=saved.length+' fichas confirmadas en Supabase.';},'data-error');
-  $('inventory-refresh').onclick=()=>action(refreshInventory);
-  $('save-online').onclick=()=>saveOnline();
+  $('shared-read').onclick=()=>action(refreshProduction,'data-error');
+  $('shared-write').hidden=true;
+  $('inventory-refresh').onclick=()=>action(refreshProduction);
+  $('save-online').onclick=()=>action(refreshProduction);
   $('new').onclick=$('empty-new').onclick=()=>openRecord();$('close-editor').onclick=closeEditor;
   $('editor').addEventListener('cancel',e=>{e.preventDefault();closeEditor();});
   $('search').oninput=render;for(const id of ['brand-filter','status-filter','pending','sort','images-only'])$(id).onchange=render;
@@ -164,15 +185,15 @@ function bind(){
   $('data-open').onclick=()=>{$('data-error').textContent='';$('data-dialog').showModal();};
   document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{if(state.busy)return;$(b.dataset.close).close();if(b.dataset.close==='connection')$('token').value='';});
   $('export-json').onclick=()=>action(()=>exportCatalog(),'data-error');$('editor-backup').onclick=()=>action(()=>exportCatalog(),'editor-error');
-  $('import-json').onchange=()=>{const file=$('import-json').files[0];$('import-json').value='';if(!file)return;action(async()=>{const incoming=parseCatalog(await file.text()),mode=$('import-mode').value;if(mode==='replace'&&state.catalog.records.length&&!confirm('¿Reemplazar la copia local por este JSON? Descargá un respaldo antes si necesitás conservarla.'))return;const c=mode==='merge'?mergeCatalogs(state.catalog,incoming):incoming;await commit(c,{remoteDirty:true});state.selected.clear();render();$('data-dialog').close();notice(`${incoming.records.length} fichas importadas. Guardá un respaldo al terminar.`);},'data-error');};
+  $('import-json').onchange=()=>{const file=$('import-json').files[0];$('import-json').value='';if(!file)return;action(async()=>{const incoming=parseCatalog(await file.text()),mode=$('import-mode').value;if(mode==='replace'&&state.catalog.records.length&&!confirm('¿Reemplazar la copia local por este JSON? Descargá un respaldo antes si necesitás conservarla.'))return;const c=mode==='merge'?mergeCatalogs(state.catalog,incoming):incoming;await commit(c,{remoteDirty:true});state.sharedReady=false;state.selected.clear();render();$('data-dialog').close();notice('Respaldo recuperado localmente. Actualizá desde Supabase antes de editar.');},'data-error');};
   $('connect-github').onclick=()=>{state.saveAfterConnect=false;if(github.connected()){github.disconnect();render();return;}$('token').value='';$('connection-error').textContent='';$('connection').showModal();};
   $('connection-form').onsubmit=e=>{e.preventDefault();const token=$('token').value;$('token').value='';action(async()=>{await github.connect(token);if(state.saveAfterConnect){const sha=await github.writeRemote(state.catalog,state.remoteSha);await commit(state.catalog,{sha,remoteDirty:false});notice('Catalogación guardada en data/catalogo.json de GitHub.');}state.saveAfterConnect=false;$('connection').close();render();},'connection-error');};
-  $('read-github').onclick=()=>action(async()=>{if(state.catalog.records.length&&!confirm('¿Reemplazar tu copia local por la de GitHub? Descargá antes tu JSON si tenés cambios que querés conservar.'))return;const remote=await github.readRemote();await commit(remote.catalog,{sha:remote.sha,remoteDirty:false});state.selected.clear();render();$('data-error').textContent='Versión de GitHub cargada en la copia local.';await refreshInventory();},'data-error');
+  $('read-github').onclick=()=>action(async()=>{if(state.catalog.records.length&&!confirm('¿Reemplazar tu copia local por la de GitHub? Descargá antes tu JSON si tenés cambios que querés conservar.'))return;const remote=await github.readRemote();await commit(remote.catalog,{sha:remote.sha,remoteDirty:false});state.selected.clear();render();$('data-error').textContent='Versión de GitHub cargada en la copia local.';await refreshProduction();},'data-error');
   $('save-github').onclick=()=>saveOnline('data-error');
   $('bulk-open').onclick=()=>{$('bulk-summary').textContent=`${state.selected.size} máquinas seleccionadas: ${[...state.selected].slice(0,6).join(', ')}${state.selected.size>6?'…':''}`;$('bulk-error').textContent='';$('bulk-value').value='';bulkOptions();$('bulk-dialog').showModal();};
   $('bulk-field').onchange=bulkOptions;
-  $('bulk-form').onsubmit=e=>{e.preventDefault();action(async()=>{const key=$('bulk-field').value,value=$('bulk-value').value.trim();if(!value)throw Error('Ingresá un valor.');if(!confirm(`¿Aplicar «${value}» a ${state.selected.size} máquinas?`))return;let next=state.catalog;for(const id of state.selected){const r=structuredClone(next.records.find(r=>r.id===id));r[key]=value;next=saveRecord(next,r);}await commit(next);state.selected.clear();$('bulk-dialog').close();render();notice('Cambio aplicado a las fichas seleccionadas.');},'bulk-error');};
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!state.busy&&!$('editor').open&&Date.now()-new Date(state.inventoryCheckedAt||0).getTime()>60000)action(refreshInventory);});
+  $('bulk-form').onsubmit=e=>{e.preventDefault();action(async()=>{const key=$('bulk-field').value,value=$('bulk-value').value.trim();if(!value)throw Error('Ingresá un valor.');if(!confirm(`¿Aplicar «${value}» a ${state.selected.size} máquinas?`))return;let next=state.catalog;for(const id of state.selected){const r=structuredClone(next.records.find(r=>r.id===id));r[key]=value;next=saveRecord(next,r);}await saveProduction(next,next.records.filter(r=>state.selected.has(r.id)));state.selected.clear();$('bulk-dialog').close();render();notice('Cambio aplicado a las fichas seleccionadas.');},'bulk-error');};
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!state.busy&&!$('editor').open&&Date.now()-new Date(state.inventoryCheckedAt||0).getTime()>60000)action(refreshProduction);});
   window.addEventListener('beforeunload',e=>{if(isDirty()){e.preventDefault();e.returnValue='';}});
 }
 function bulkOptions(){closePicker();}
@@ -181,10 +202,10 @@ async function init(){
   $('pending').append(...[...new Map([...centralFields,...manufactureFields,...standaloneDocumentFields,].map(f=>[f[0],f])).values()].map(f=>option(f[0],f[1])));$('bulk-field').append(...bulkFields.map(k=>option(k,fieldMap.get(k)[1])));attachCombo($('image-view'),{label:'Vista de imagen',getOptions:()=>vocabulary('image.view'),onChange:value=>{if(currentImage()){currentImage().view=value;markDirty();renderMedia();}}});
   attachCombo($('image-caption'),{label:'Descripción de imagen',getOptions:()=>vocabulary('image.caption'),onChange:value=>{if(currentImage()){currentImage().caption=value;markDirty();}}});
   attachCombo($('bulk-value'),{label:'Valor para seleccionadas',getOptions:()=>vocabulary($('bulk-field').value),onChange:()=>{}});bind();
-  try{const saved=await readLocal();if(saved){state.localRevision=saved.revision||null;state.catalog=parseCatalog(saved.catalog);state.remoteSha=saved.remoteSha||null;state.remoteDirty=Boolean(saved.remoteDirty);}else{try{const remote=await github.readRemote();await commit(remote.catalog,{sha:remote.sha,remoteDirty:false});}catch{notice('Catálogo vacío. Podés crear fichas o importar un JSON.');}}}catch(e){notice(`No se pudo recuperar la copia local: ${e.message}. Podés importar un respaldo.`,true);}
+  try{const saved=await readLocal();if(saved){state.localRevision=saved.revision||null;state.catalog=parseCatalog(saved.catalog);state.remoteSha=saved.remoteSha||null;state.remoteDirty=false;}}catch(e){notice(`No se pudo recuperar la copia local: ${e.message}. Podés importar un respaldo.`,true);}
   render();
   // Always consult the source, even when IndexedDB or GitHub already has records.
-  try{await refreshInventory();}catch(e){notice(e.message,true);}
+  try{await refreshProduction();}catch(e){notice('No se pudo conectar al catálogo compartido: '+e.message,true);}
   state.busy=false;document.body.classList.remove('busy');
 }
 init();
