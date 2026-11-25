@@ -1,5 +1,5 @@
 import {rememberRecordTerms} from './vocabulary.js?v=1.4.2';
-import {safeInventoryImage} from './inventory-source.js?v=1.4.2';
+import {safeInventoryImage} from './inventory-source.js?v=1.5.4';
 import {fields, requiredFields} from './schema.js?v=1.4.2';
 export const FORMAT='prodigo-catalogador-maquinas';
 export function emptyCatalog(){return {format:FORMAT,schemaVersion:1,updatedAt:null,records:[],vocabularies:{}};}
