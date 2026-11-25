@@ -56,12 +56,12 @@ function closeEditor(){closePicker();if(state.busy)return;if(isDirty()&&!confirm
 function openRecord(id,queue){
   if(!state.sharedReady){notice('Conectá Supabase antes de catalogar. Ingresá al inventario y actualizá.',true);return;}
   if(!id){notice('Inventariá el objeto primero en la app de inventario.',true);return;}
-  state.draft=identificationDraft(state.catalog.records.find(r=>r.id===id)||newRecord(state.catalog.records));state.dirty=false;state.tab=0;state.pendingDocs=[];
+  state.draft=identificationDraft(state.catalog.records.find(r=>r.id===id)||newRecord(state.catalog.records));state.dirty=false;state.tab=0;state.pendingDocs=[];document.querySelector('.media').classList.remove('photo-collapsed');$('mobile-photo-toggle').setAttribute('aria-expanded','true');$('mobile-photo-toggle').textContent='Foto ▾';
   state.queue=queue||state.visible.map(r=>r.id);
   state.image=Math.max(0,state.draft.images.findIndex(im=>im.id===state.draft.primaryImageId));
   $('editor-error').textContent='';$('record-id').textContent=`${state.draft.inventory||'SIN INVENTARIO'} · FICHA ${state.draft.id}`;$('editor-title').textContent=title(state.draft);$('delete-record').hidden=true;
   $('record-source').hidden=!state.draft.inventorySource;$('record-source').textContent=`Inventario ${state.draft.inventory} · Solo lectura del origen. Los cambios catalográficos se guardan en Supabase.`;
-  renderIdentification();renderMedia();if(!$('editor').open)$('editor').showModal();focusField();
+  renderIdentification();renderMedia();if(!$('editor').open)$('editor').showModal();if(!matchMedia('(max-width:700px)').matches)focusField();
 }
 function focusField(){requestAnimationFrame(()=>{$('fields').querySelector('input,select,textarea,button')?.focus({preventScroll:true});});}
 function markDirty(){state.dirty=true;}
@@ -93,7 +93,7 @@ function renderDocuments(form){
 function renderIdentification(){
   closePicker();
   const form=$('fields');form.replaceChildren();
-  let nav=$('catalog-tabs');if(!nav){nav=node('nav','catalog-tabs');nav.id='catalog-tabs';form.before(nav);}nav.replaceChildren();for(const [i,label] of tabs.entries()){const b=node('button',state.tab===i?'primary':'',String(i+1)+'. '+label);if(![0,1,4].includes(i)){b.classList.add('preview-tab');b.title='Solo consulta';}b.type='button';b.disabled=state.draft.recordKind==='document'&&i===1;b.onclick=()=>{state.tab=i;renderIdentification();};nav.append(b);}
+  let nav=$('catalog-tabs');if(!nav){nav=node('nav','catalog-tabs');nav.id='catalog-tabs';form.before(nav);}nav.replaceChildren();for(const [i,label] of tabs.entries()){const b=node('button',state.tab===i?'primary':'',String(i+1)+'. '+label);if(![0,1,4].includes(i)){b.classList.add('preview-tab');b.title='Solo consulta';}b.setAttribute('data-tab-number',String(i+1));b.setAttribute('aria-label',label+(![0,1,4].includes(i)?' (solo consulta)':''));b.setAttribute('aria-current',state.tab===i?'true':'false');b.type='button';b.disabled=state.draft.recordKind==='document'&&i===1;b.onclick=()=>{state.tab=i;renderIdentification();};nav.append(b);}
  $('identification-title').textContent=tabs[state.tab||0]+(state.tab===0?' · Obligatoria':[1,4].includes(state.tab)?' · Optativa':' · Solo consulta');
  if(state.tab===4)renderDocuments(form);else for(const def of (state.tab===0?(state.draft.recordKind==='document'?standaloneDocumentFields:centralFields):state.tab===1?manufactureFields:optionalFields[state.tab]))form.append(fieldControl(def,state.draft[def[0]],value=>{state.draft[def[0]]=value;markDirty();}));
   const note=observationFields[state.tab||0];form.append(fieldControl(note,state.draft[note[0]],value=>{state.draft[note[0]]=value;markDirty();}));
@@ -158,6 +158,7 @@ async function saveProduction(c,records){
 }
 async function refreshProduction(){await refreshInventory();await loadProduction();notice('Inventario y catálogo compartido actualizados.');}
 function bind(){
+  const mobile=matchMedia('(max-width:700px)');const filterPanel=document.querySelector('.mobile-filters');const photoToggle=$('mobile-photo-toggle');const photoPanel=document.querySelector('.media');if(mobile.matches)filterPanel.open=false;mobile.addEventListener('change',e=>{filterPanel.open=!e.matches;});photoToggle.onclick=()=>{const collapsed=photoPanel.classList.toggle('photo-collapsed');photoToggle.setAttribute('aria-expanded',String(!collapsed));photoToggle.textContent=collapsed?'Foto ▸':'Foto ▾';};
   $('shared-read').onclick=()=>action(refreshProduction,'data-error');
   $('shared-write').hidden=true;
   $('inventory-refresh').onclick=()=>action(refreshProduction);
