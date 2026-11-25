@@ -1,3 +1,4 @@
+import * as shared from './supabase-catalog.js?v=1.4.3';
 import {vocabularyFor} from './vocabulary.js?v=1.4.2';
 import {attachCombo,closePicker} from './combo.js?v=1.4.2';
 import {refreshFromInventory,readInventory} from './inventory.js?v=1.4.2';
@@ -130,7 +131,14 @@ async function saveOnline(errorId='notice'){
   if(!github.connected()){requestGithubConnection();return;}
   await action(async()=>{const sha=await github.writeRemote(state.catalog,state.remoteSha);await commit(state.catalog,{sha,remoteDirty:false});notice('Catalogación guardada en data/catalogo.json de GitHub.');},errorId);
 }
+function sharedPayload(r,catalog){
+  const payload=structuredClone(r);delete payload.id;delete payload.inventorySource;delete payload.updatedAt;delete payload.createdAt;
+  payload.documents=(payload.documents||[]).map(d=>{if(!d.targetId)return d;const target=catalog.records.find(x=>x.id===d.targetId);const code=target?.inventory||d.targetId;if(!/^P[0-9]{6}$/.test(code))throw Error('La ficha '+r.inventory+' tiene una relación sin número P definitivo.');return {...d,targetId:code};});
+  return payload;
+}
 function bind(){
+  $('shared-read').onclick=()=>action(async()=>{const rows=await shared.readShared();if(!rows.length){$('shared-state').textContent='Catálogo compartido vacío.';return;}if(!confirm('¿Recuperar '+rows.length+' fichas de Supabase? Se reemplazarán los datos catalográficos locales correspondientes. Descargá antes un respaldo si tenés cambios.'))return;const c=structuredClone(state.catalog);c.sharedRevisions??={};for(const row of rows){const existing=c.records.find(r=>r.inventory===row.inventory_code);const record={...(existing||newRecord(c.records)),...row.payload,inventory:row.inventory_code};if(existing)c.records[c.records.indexOf(existing)]=record;else c.records.push(record);c.sharedRevisions[row.inventory_code]=row.revision;}await commit(parseCatalog(c));$('shared-state').textContent=rows.length+' fichas recuperadas.';},'data-error');
+  $('shared-write').onclick=()=>action(async()=>{const c=structuredClone(state.catalog);const records=c.records.filter(r=>r.status==='Catalogada'&&/^P[0-9]{6}$/.test(r.inventory||''));if(!records.length)throw Error('No hay fichas catalogadas con número P definitivo.');if(!confirm('¿Guardar '+records.length+' fichas catalogadas en Supabase? No modifica el inventario.'))return;c.sharedRevisions??={};const entries=records.map(r=>({code:r.inventory,revision:c.sharedRevisions[r.inventory]||0,payload:sharedPayload(r,c)}));const saved=await shared.writeShared(entries);for(const row of saved)c.sharedRevisions[row.inventory_code]=row.revision;await commit(c);$('shared-state').textContent=saved.length+' fichas confirmadas en Supabase.';},'data-error');
   $('inventory-refresh').onclick=()=>action(refreshInventory);
   $('save-online').onclick=()=>saveOnline();
   $('new').onclick=$('empty-new').onclick=()=>openRecord();$('close-editor').onclick=closeEditor;
