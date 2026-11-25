@@ -57,10 +57,13 @@ export const centralFields = [
 ];
 const centralKeys=new Set(centralFields.map(([key])=>key));
 export const legacyFields=previousGroups.flatMap(g=>g.fields).filter(([key])=>!centralKeys.has(key));
-export const fields=[...centralFields,...legacyFields];
+export const fields=[...centralFields,...legacyFields,...[["designer","Diseñador","combo"],["productionQuantity","Cantidad producida","combo"],["patents","Patentes","combo"],["materials","Materiales","combo"],["components","Componentes","combo"],["accessories","Accesorios","combo"],["documentType","Tipo documental","combo"],["documentTitle","Título o denominación","combo"],["documentAuthor","Autor / entidad responsable","combo"],["documentDate","Fecha","combo"],["documentLanguage","Idioma","combo"],["documentExtent","Extensión","combo"],["documentNotes","Notas","combo"]]];
 export const fieldMap = new Map(fields.map(f=>[f[0],f]));
 export const documentTypes=['Libro','Publicidad','Efímera','Garantía','Factura de compra','Diploma','Fotografía de época','Postal','Manual','Otro'];
 export const documentFields=[['type','Tipo de documento','select',documentTypes],['title','Título / descripción','text'],['date','Fecha','text'],['reference','Referencia / ubicación / enlace','text'],['notes','Notas','area']];
 export const imageViews=['General','Frente','Reverso','Lateral','Detalle','Número de serie','Teclado','Documentación','Otro'];
 export const requiredFields=['brand','model'];
 export const bulkFields=['denomination','brand','model','version','year','color','keyboardLanguage','country','collection'];
+
+export const manufactureFields=['manufacturer','designer','modelFrom','modelTo','productionQuantity','patents','mechanism','dimensions','weight','keyboardLanguage','keyboardLayout','materials','color','paint','components','accessories','datingSource','type','body','base','keys','lid','case','ribbon','parts','typeface','typeCard'].map(k=>fieldMap.get(k));
+export const standaloneDocumentFields=['inventory','documentType','documentTitle','documentAuthor','documentDate','documentLanguage','documentExtent','documentNotes'].map(k=>fieldMap.get(k));
