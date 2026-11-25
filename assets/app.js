@@ -1,11 +1,11 @@
-import {vocabularyFor} from './vocabulary.js?v=1.3.0';
-import {attachCombo,closePicker} from './combo.js?v=1.3.0';
-import {refreshFromInventory,readInventory} from './inventory.js?v=1.3.0';
-import {centralFields,fields,fieldMap,bulkFields,manufactureFields,standaloneDocumentFields} from './schema.js?v=1.4.0';
-import {emptyCatalog,newRecord,identificationDraft,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js?v=1.4.0';
-import {readLocal,writeLocal,download} from './storage.js?v=1.3.0';
-import * as github from './github.js?v=1.3.0';
-import {prepareImage,rotateImage} from './media.js?v=1.3.0';
+import {vocabularyFor} from './vocabulary.js?v=1.4.2';
+import {attachCombo,closePicker} from './combo.js?v=1.4.2';
+import {refreshFromInventory,readInventory} from './inventory.js?v=1.4.2';
+import {centralFields,fields,fieldMap,bulkFields,manufactureFields,standaloneDocumentFields,optionalFields,observationFields} from './schema.js?v=1.4.2';
+import {emptyCatalog,newRecord,identificationDraft,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js?v=1.4.2';
+import {readLocal,writeLocal,download} from './storage.js?v=1.4.2';
+import * as github from './github.js?v=1.4.2';
+import {prepareImage,rotateImage} from './media.js?v=1.4.2';
 const $=id=>document.getElementById(id);
 const state={catalog:emptyCatalog(),remoteSha:null,remoteDirty:false,localRevision:null,inventoryCheckedAt:null,selected:new Set(),draft:null,image:0,dirty:false,visible:[],queue:[],size:1,busy:false,zoom:1,x:0,y:0};
 function node(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
@@ -63,23 +63,23 @@ function openRecord(id,queue){
 function focusField(){requestAnimationFrame(()=>{$('fields').querySelector('input,select,textarea,button')?.focus({preventScroll:true});});}
 function markDirty(){state.dirty=true;}
 function fieldControl(def,value,onchange,prefix='f'){
-  const [key,label,type]=def;const wrapper=node('div','field-control'+(type==='area'?' wide':''));const caption=node('label');caption.htmlFor=`${prefix}-${key}`;caption.append(node('span','',label));wrapper.append(caption);
+  const [key,label,type]=def;const mandatory=prefix==='f'&&state.tab===0&&(state.draft?.recordKind==='document'?['documentType','documentTitle']:['inventory','denomination','brand','model']).includes(key);const wrapper=node('div','field-control'+(type==='area'?' wide':''));const caption=node('label');caption.htmlFor=`${prefix}-${key}`;caption.append(node('span','',label+(mandatory?' *':'')));wrapper.append(caption);
   const input=node(type==='area'?'textarea':'input');input.id=`${prefix}-${key}`;input.name=key;input.value=value||'';
   if(key==='inventory'&&state.draft?.inventorySource){input.readOnly=true;input.title='Código conservado del inventario de Pródigo';}
   input.addEventListener('input',()=>onchange(input.value));wrapper.append(input);
   const vocabularyKey=prefix.startsWith('doc-')?`document.${key}`:key;
-  attachCombo(input,{label,getOptions:()=>vocabulary(vocabularyKey),onChange:onchange});return wrapper;
+  if(!key.startsWith('observations'))attachCombo(input,{label,getOptions:()=>vocabulary(vocabularyKey),onChange:onchange});else input.rows=5;return wrapper;
 }
 const tabs=['Identificación','Fabricación','Comercialización','Procedencia y trayectoria','Documentación','Conservación','Museografía','Gestión y validación'];
 const docTypes=['Manual de uso','Manual de reparación','Libro','Catálogo comercial','Publicidad','Factura','Garantía','Fotografía histórica','Correspondencia','Ephemera','Documento mecanografiado','Fuente bibliográfica','Investigación propia'];
 function allDocuments(){return [...state.catalog.records,...(state.pendingDocs||[])];}
-const relationTypes=['Acompañaba originalmente al ejemplar','Adquirido junto con el ejemplar','Corresponde al modelo','Documentación comercial','Referencia histórica o técnica','Relacionado con el propietario','Otro'];
-function addLink(target,type,relation){if(target===state.draft.id)return;const links=state.draft.documents; if(!links.some(d=>d.targetId===target&&d.relation===relation)){links.push({targetId:target,type,relation});markDirty();}renderIdentification();}
-function chooseRelation(target,type){const form=$('fields'),panel=node('div','field-control wide'),select=node('select'),custom=node('input'),save=node('button','','Confirmar relación');select.append(option('','Seleccionar tipo de relación'),...relationTypes.map(t=>option(t)));custom.placeholder='Especificar otra relación';custom.hidden=true;select.onchange=()=>{custom.hidden=select.value!=='Otro';};save.type='button';save.onclick=()=>{const relation=select.value==='Otro'?custom.value.trim():select.value;if(!relation){$('editor-error').textContent='Seleccioná el tipo de relación.';return;}$('editor-error').textContent='';addLink(target,type,relation);};panel.append(node('label','','Tipo de relación'),select,custom,save);form.append(panel);select.focus();}
+const relationTypes=['Pertenece al ejemplar','No pertenece al ejemplar'];
+function addLink(target,type,relation){if(target===state.draft.id)return;const links=state.draft.documents; const existing=links.find(d=>d.targetId===target);if(existing){existing.relation=relation;markDirty();}else{links.push({targetId:target,type,relation});markDirty();}renderIdentification();}
+function chooseRelation(target,type){const form=$('fields'),panel=node('div','field-control wide'),select=node('select'),save=node('button','','Confirmar relación');select.append(option('','Seleccionar tipo de relación'),...relationTypes.map(t=>option(t)));save.type='button';save.onclick=()=>{if(!relationTypes.includes(select.value)){$('editor-error').textContent='Seleccioná el tipo de relación.';return;}$('editor-error').textContent='';addLink(target,type,select.value);};panel.append(node('label','','Tipo de relación'),select,save);form.append(panel);select.focus();}
 function linkCode(code){const existing=allDocuments().find(r=>r.inventory===code);chooseRelation(existing?.id||code,existing?.documentType||'Objeto de inventario');}
 function renderDocuments(form){
  const links=state.draft.documents||[];
- for(const d of links){const target=allDocuments().find(r=>r.id===d.targetId||r.inventory===d.targetId);const row=node('div','field-control wide');row.append(node('strong','',target?(target.inventory||target.id)+' · '+(target.documentTitle||title(target)):d.title||d.reference||d.targetId||'Documento anterior'),node('span','',[d.type,d.relation||'Relación sin especificar'].filter(Boolean).join(' · ')));const edit=node('button','','Editar relación');edit.type='button';edit.onclick=()=>{const value=prompt('Tipo de relación',d.relation||'');if(value?.trim()){d.relation=value.trim();markDirty();renderIdentification();}};row.append(edit);const remove=node('button','','Desvincular');remove.type='button';remove.onclick=()=>{state.draft.documents=links.filter(x=>x!==d);markDirty();renderIdentification();};row.append(remove);form.append(row);}
+ for(const d of links){const target=allDocuments().find(r=>r.id===d.targetId||r.inventory===d.targetId);const row=node('div','field-control wide');row.append(node('strong','',target?(target.inventory||target.id)+' · '+(target.documentTitle||title(target)):d.title||d.reference||d.targetId||'Documento anterior'),node('span','',[d.type,d.relation||'Relación sin especificar'].filter(Boolean).join(' · ')));const edit=node('button','','Editar relación');edit.type='button';edit.onclick=()=>{const select=node('select');select.append(option('','Seleccionar tipo de relación'),...relationTypes.map(t=>option(t)));select.value=relationTypes.includes(d.relation)?d.relation:'';select.onchange=()=>{if(relationTypes.includes(select.value)){d.relation=select.value;markDirty();renderIdentification();}};edit.replaceWith(select);select.focus();};row.append(edit);const remove=node('button','','Desvincular');remove.type='button';remove.onclick=()=>{state.draft.documents=links.filter(x=>x!==d);markDirty();renderIdentification();};row.append(remove);form.append(row);}
  for(const r of allDocuments().filter(r=>r.id!==state.draft.id&&r.documents?.some(d=>d.targetId===state.draft.id||d.targetId===state.draft.inventory))){const row=node('div','field-control wide');row.append(node('span','','Relación entrante: '+(r.inventory||r.id)+' · '+(r.documentTitle||title(r))));form.append(row);}
  const actions=node('div','field-control wide');const create=node('button','','＋ Nuevo inventario documental'),link=node('button','','Vincular inventario existente');create.type=link.type='button';actions.append(create,link);form.append(actions);
  create.onclick=()=>{const request=crypto.randomUUID(),source=state.draft.id;const url=new URL('https://frankhode.github.io/Prodigo_inventario/');url.searchParams.set('derived',request);const popup=window.open(url.href,'_blank');if(!popup){$('editor-error').textContent='Permití abrir una nueva pestaña para inventariar.';return;}const receive=event=>{if(event.origin!==url.origin||event.source!==popup||event.data?.type!=='prodigo-inventory-created'||event.data.request!==request||!/^P\\d{6}$/.test(event.data.code))return;window.removeEventListener('message',receive);if(state.draft?.id!==source)return;state.tab=4;renderIdentification();linkCode(event.data.code);};window.addEventListener('message',receive);const panel=node('div','field-control wide'),code=node('input'),manual=node('button','','Vincular número asignado');code.placeholder='P000000';manual.type='button';manual.onclick=()=>{if(!/^P\\d{6}$/.test(code.value.trim())){$('editor-error').textContent='Ingresá un código P válido.';return;}window.removeEventListener('message',receive);linkCode(code.value.trim());};panel.append(node('p','','Inventariá en la nueva pestaña. Al guardar se recuperará el número P. Si no vuelve automáticamente, ingresalo acá.'),code,manual);actions.after(panel);};
@@ -88,9 +88,10 @@ function renderDocuments(form){
 function renderIdentification(){
   closePicker();
   const form=$('fields');form.replaceChildren();
-  let nav=$('catalog-tabs');if(!nav){nav=node('nav','catalog-tabs');nav.id='catalog-tabs';form.before(nav);}nav.replaceChildren();for(const [i,label] of tabs.entries()){const b=node('button',state.tab===i?'primary':'',String(i+1)+'. '+label);b.type='button';b.disabled=![0,1,4].includes(i)||(state.draft.recordKind==='document'&&i===1);b.onclick=()=>{state.tab=i;renderIdentification();};nav.append(b);}
- $('identification-title').textContent=tabs[state.tab||0];
- if(state.tab===4)renderDocuments(form);else for(const def of (state.draft.recordKind==='document'?standaloneDocumentFields:state.tab===1?manufactureFields:centralFields))form.append(fieldControl(def,state.draft[def[0]],value=>{state.draft[def[0]]=value;markDirty();}));
+  let nav=$('catalog-tabs');if(!nav){nav=node('nav','catalog-tabs');nav.id='catalog-tabs';form.before(nav);}nav.replaceChildren();for(const [i,label] of tabs.entries()){const b=node('button',state.tab===i?'primary':'',String(i+1)+'. '+label);b.type='button';b.disabled=state.draft.recordKind==='document'&&i===1;b.onclick=()=>{state.tab=i;renderIdentification();};nav.append(b);}
+ $('identification-title').textContent=tabs[state.tab||0]+(state.tab===0?' · Obligatoria':' · Optativa');
+ if(state.tab===4)renderDocuments(form);else for(const def of (state.tab===0?(state.draft.recordKind==='document'?standaloneDocumentFields:centralFields):state.tab===1?manufactureFields:optionalFields[state.tab]))form.append(fieldControl(def,state.draft[def[0]],value=>{state.draft[def[0]]=value;markDirty();}));
+  const note=observationFields[state.tab||0];form.append(fieldControl(note,state.draft[note[0]],value=>{state.draft[note[0]]=value;markDirty();}));
   document.querySelector('.entry').scrollTo(0,0);
 }
 function currentImage(){return state.draft?.images[state.image];}
@@ -105,6 +106,7 @@ function renderMedia(){
 }
 async function persistDraft(next=false){
   const r=structuredClone(state.draft);for(const [key] of fields)if(typeof r[key]==='string')r[key]=r[key].trim();
+  const required=r.recordKind==='document'?['documentType','documentTitle']:['inventory','denomination','brand','model'];const absent=required.filter(k=>!String(r[k]||'').trim());if(absent.length){state.tab=0;renderIdentification();throw Error('Completá los campos de identificación obligatorios: '+absent.map(k=>fieldMap.get(k)?.[1]||k).join(', ')+'.');}r.status='Catalogada';
   validateRecord(r,state.catalog.records);let catalog=state.catalog;for(const doc of state.pendingDocs||[])if(r.documents.some(d=>d.targetId===doc.id))catalog=saveRecord(catalog,doc);await commit(saveRecord(catalog,r));state.dirty=false;
   const index=state.queue.indexOf(r.id);const nextId=index>=0?state.queue[index+1]:null;
   if(next&&nextId&&nextId!==r.id){openRecord(nextId,state.queue);}else{state.draft=null;$('editor').close();notice(next?'Ficha guardada. Terminaste el recorrido.':'Ficha guardada en la copia local.');}
@@ -166,7 +168,7 @@ function bind(){
 function bulkOptions(){closePicker();}
 async function init(){
   state.busy=true;document.body.classList.add('busy');
-  $('pending').append(...[...new Map([...centralFields,...manufactureFields,...standaloneDocumentFields].map(f=>[f[0],f])).values()].map(f=>option(f[0],f[1])));$('bulk-field').append(...bulkFields.map(k=>option(k,fieldMap.get(k)[1])));attachCombo($('image-view'),{label:'Vista de imagen',getOptions:()=>vocabulary('image.view'),onChange:value=>{if(currentImage()){currentImage().view=value;markDirty();renderMedia();}}});
+  $('pending').append(...[...new Map([...centralFields,...manufactureFields,...standaloneDocumentFields,...optionalFields.flat()].map(f=>[f[0],f])).values()].map(f=>option(f[0],f[1])));$('bulk-field').append(...bulkFields.map(k=>option(k,fieldMap.get(k)[1])));attachCombo($('image-view'),{label:'Vista de imagen',getOptions:()=>vocabulary('image.view'),onChange:value=>{if(currentImage()){currentImage().view=value;markDirty();renderMedia();}}});
   attachCombo($('image-caption'),{label:'Descripción de imagen',getOptions:()=>vocabulary('image.caption'),onChange:value=>{if(currentImage()){currentImage().caption=value;markDirty();}}});
   attachCombo($('bulk-value'),{label:'Valor para seleccionadas',getOptions:()=>vocabulary($('bulk-field').value),onChange:()=>{}});bind();
   try{const saved=await readLocal();if(saved){state.localRevision=saved.revision||null;state.catalog=parseCatalog(saved.catalog);state.remoteSha=saved.remoteSha||null;state.remoteDirty=Boolean(saved.remoteDirty);}else{try{const remote=await github.readRemote();await commit(remote.catalog,{sha:remote.sha,remoteDirty:false});}catch{notice('Catálogo vacío. Podés crear fichas o importar un JSON.');}}}catch(e){notice(`No se pudo recuperar la copia local: ${e.message}. Podés importar un respaldo.`,true);}
