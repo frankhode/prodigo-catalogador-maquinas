@@ -1,7 +1,7 @@
 import {vocabularyFor} from './vocabulary.js?v=1.3.0';
 import {attachCombo,closePicker} from './combo.js?v=1.3.0';
-import {refreshFromInventory} from './inventory.js?v=1.3.0';
-import {centralFields,fields,fieldMap,bulkFields} from './schema.js?v=1.3.0';
+import {refreshFromInventory,readInventory} from './inventory.js?v=1.3.0';
+import {centralFields,fields,fieldMap,bulkFields,manufactureFields,standaloneDocumentFields} from './schema.js?v=1.3.0';
 import {emptyCatalog,newRecord,identificationDraft,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js?v=1.3.0';
 import {readLocal,writeLocal,download} from './storage.js?v=1.3.0';
 import * as github from './github.js?v=1.3.0';
@@ -33,7 +33,7 @@ function render(){
     return String(sort==='brand'?title(a):a.id).localeCompare(String(sort==='brand'?title(b):b.id),'es',{numeric:true});
   });state.visible=visible;
   const visibleIds=new Set(visible.map(r=>r.id));for(const id of state.selected)if(!visibleIds.has(id))state.selected.delete(id);
-  $('count').textContent=`${visible.length} de ${c.records.length} máquinas${state.selected.size?` · ${state.selected.size} seleccionadas`:''}`;
+  $('count').textContent=`${visible.length} de ${c.records.length} objetos${state.selected.size?` · ${state.selected.size} seleccionadas`:''}`;
   $('bulk-open').disabled=!state.selected.size;
   $('gallery').replaceChildren(...visible.map(card));$('gallery').classList.toggle('images-only',$('images-only').checked);
   $('gallery').style.setProperty('--card-size',['155px','230px','320px','440px'][state.size]);$('size').textContent=`Miniaturas: ${['pequeñas','medianas','grandes','muy grandes'][state.size]}`;
@@ -53,7 +53,7 @@ function card(r){
 function isDirty(){return state.draft&&state.dirty;}
 function closeEditor(){closePicker();if(state.busy)return;if(isDirty()&&!confirm('Hay cambios sin guardar en esta ficha. ¿Descartarlos?'))return;state.draft=null;state.dirty=false;$('editor').close();}
 function openRecord(id,queue){
-  state.draft=identificationDraft(state.catalog.records.find(r=>r.id===id)||newRecord(state.catalog.records));state.dirty=false;
+  state.draft=identificationDraft(state.catalog.records.find(r=>r.id===id)||newRecord(state.catalog.records));state.dirty=false;state.tab=0;state.pendingDocs=[];
   state.queue=queue||state.visible.map(r=>r.id);
   state.image=Math.max(0,state.draft.images.findIndex(im=>im.id===state.draft.primaryImageId));
   $('editor-error').textContent='';$('record-id').textContent=`${state.draft.inventory||'SIN INVENTARIO'} · FICHA ${state.draft.id}`;$('editor-title').textContent=title(state.draft);$('delete-record').hidden=!id;
@@ -70,10 +70,25 @@ function fieldControl(def,value,onchange,prefix='f'){
   const vocabularyKey=prefix.startsWith('doc-')?`document.${key}`:key;
   attachCombo(input,{label,getOptions:()=>vocabulary(vocabularyKey),onChange:onchange});return wrapper;
 }
+const tabs=['Identificación','Fabricación','Comercialización','Procedencia y trayectoria','Documentación','Conservación','Museografía','Gestión y validación'];
+const docTypes=['Manual de uso','Manual de reparación','Libro','Catálogo comercial','Publicidad','Factura','Garantía','Fotografía histórica','Correspondencia','Ephemera','Documento mecanografiado','Fuente bibliográfica','Investigación propia'];
+function allDocuments(){return [...state.catalog.records,...(state.pendingDocs||[])];}
+function addLink(target,type){if(target===state.draft.id)return;const links=state.draft.documents; if(!links.some(d=>d.targetId===target)){links.push({targetId:target,type});markDirty();}renderIdentification();}
+function renderDocuments(form){
+ const links=state.draft.documents||[];
+ for(const d of links){const target=allDocuments().find(r=>r.id===d.targetId);const row=node('div','field-control wide');row.append(node('strong','',target?(target.inventory||target.id)+' · '+(target.documentTitle||title(target)):d.title||d.reference||d.targetId||'Documento anterior'),node('span','',d.type||''));const remove=node('button','','Desvincular');remove.type='button';remove.onclick=()=>{state.draft.documents=links.filter(x=>x!==d);markDirty();renderIdentification();};row.append(remove);form.append(row);}
+ for(const r of allDocuments().filter(r=>r.id!==state.draft.id&&r.documents?.some(d=>d.targetId===state.draft.id))){const row=node('div','field-control wide');row.append(node('span','','Relación entrante: '+(r.inventory||r.id)+' · '+(r.documentTitle||title(r))));form.append(row);}
+ const actions=node('div','field-control wide');const create=node('button','','＋ Nuevo inventario documental'),link=node('button','','Vincular inventario existente');create.type=link.type='button';actions.append(create,link);form.append(actions);
+ create.onclick=()=>{const panel=node('div','field-control wide');const draft={...newRecord(allDocuments()),id:'DOC-'+crypto.randomUUID(),denomination:'Documento',recordKind:'document'};for(const def of standaloneDocumentFields.filter(f=>f[0]!=='inventory')){const control=fieldControl(def,'',v=>draft[def[0]]=v,'newdoc');panel.append(control);if(def[0]==='documentType'){const input=control.querySelector('input');input.setAttribute('list','doc-types');const list=node('datalist');list.id='doc-types';list.append(...docTypes.map(t=>option(t)));control.append(list);}}
+ const file=node('input');file.type='file';file.accept='image/jpeg,image/png,image/webp';file.multiple=true;panel.append(node('label','','Imágenes del documento'),file);const save=node('button','','Agregar documento provisional');save.type='button';save.onclick=()=>action(async()=>{if(!draft.documentTitle?.trim()||!draft.documentType?.trim())throw Error('Completá tipo y título del documento.');draft.images=[];for(const f of file.files)draft.images.push(await prepareImage(f));draft.primaryImageId=draft.images[0]?.id||'';state.pendingDocs.push(draft);addLink(draft.id,draft.documentType);},'editor-error');panel.append(save);actions.replaceWith(panel);};
+ link.onclick=()=>action(async()=>{let items=[];try{items=await readInventory();}catch(e){$('editor-error').textContent='No se pudo consultar el inventario; se muestran las fichas locales.';}const panel=node('div','field-control wide'),search=node('input'),results=node('div');search.placeholder='Buscar número P, título, marca o categoría';panel.append(search,results);actions.replaceWith(panel);const candidates=[...allDocuments().filter(r=>r.id!==state.draft.id).map(r=>({id:r.id,label:[r.inventory||r.id,r.documentTitle||title(r)].join(' · '),type:r.documentType||'Documento relacionado'})),...items.filter(i=>i.code!==state.draft.inventory&&!allDocuments().some(r=>r.inventory===i.code)).map(i=>({id:i.code,label:[i.code,i.category,i.brand,i.model,i.type].filter(Boolean).join(' · '),type:i.category||'Documento relacionado'}))];const render=()=>{results.replaceChildren();const q=normalize(search.value);for(const c of candidates.filter(c=>normalize(c.label).includes(q)).slice(0,50)){const button=node('button','',c.label);button.type='button';button.onclick=()=>addLink(c.id,c.type);results.append(button);}};search.oninput=render;render();},'editor-error');
+}
 function renderIdentification(){
   closePicker();
   const form=$('fields');form.replaceChildren();
-  for(const def of centralFields)form.append(fieldControl(def,state.draft[def[0]],value=>{state.draft[def[0]]=value;markDirty();}));
+  let nav=$('catalog-tabs');if(!nav){nav=node('nav','catalog-tabs');nav.id='catalog-tabs';form.before(nav);}nav.replaceChildren();for(const [i,label] of tabs.entries()){const b=node('button',state.tab===i?'primary':'',String(i+1)+'. '+label);b.type='button';b.disabled=![0,1,4].includes(i)||(state.draft.recordKind==='document'&&i===1);b.onclick=()=>{state.tab=i;renderIdentification();};nav.append(b);}
+ $('identification-title').textContent=tabs[state.tab||0];
+ if(state.tab===4)renderDocuments(form);else for(const def of (state.draft.recordKind==='document'?standaloneDocumentFields:state.tab===1?manufactureFields:centralFields))form.append(fieldControl(def,state.draft[def[0]],value=>{state.draft[def[0]]=value;markDirty();}));
   document.querySelector('.entry').scrollTo(0,0);
 }
 function currentImage(){return state.draft?.images[state.image];}
@@ -88,11 +103,11 @@ function renderMedia(){
 }
 async function persistDraft(next=false){
   const r=structuredClone(state.draft);for(const [key] of fields)if(typeof r[key]==='string')r[key]=r[key].trim();
-  validateRecord(r,state.catalog.records);await commit(saveRecord(state.catalog,r));state.dirty=false;
+  validateRecord(r,state.catalog.records);let catalog=state.catalog;for(const doc of state.pendingDocs||[])if(r.documents.some(d=>d.targetId===doc.id))catalog=saveRecord(catalog,doc);await commit(saveRecord(catalog,r));state.dirty=false;
   const index=state.queue.indexOf(r.id);const nextId=index>=0?state.queue[index+1]:null;
   if(next&&nextId&&nextId!==r.id){openRecord(nextId,state.queue);}else{state.draft=null;$('editor').close();notice(next?'Ficha guardada. Terminaste el recorrido.':'Ficha guardada en la copia local.');}
 }
-function exportCatalog(){let c=state.catalog;if(state.draft&&state.dirty){const draft=structuredClone(state.draft);draft.status=missing(draft).length?'Borrador':draft.status;c=saveRecord(c,draft);}download(serialize(c),`prodigo-maquinas-${new Date().toLocaleDateString('en-CA')}.json`);}
+function exportCatalog(){let c=state.catalog;if(state.draft&&state.dirty){const draft=structuredClone(state.draft);draft.status=missing(draft).length?'Borrador':draft.status;for(const doc of state.pendingDocs||[])if(draft.documents.some(d=>d.targetId===doc.id))c=saveRecord(c,doc);c=saveRecord(c,draft);}download(serialize(c),`prodigo-maquinas-${new Date().toLocaleDateString('en-CA')}.json`);}
 async function refreshInventory(){
   $('inventory-state').textContent='Leyendo máquinas del inventario…';
   try{
@@ -123,7 +138,7 @@ function bind(){
   $('fields').onsubmit=e=>e.preventDefault();
   $('fields').onkeydown=e=>{if(e.key!=='Enter'||e.ctrlKey||e.metaKey||e.shiftKey||e.isComposing||e.target.tagName==='TEXTAREA'||e.target.tagName==='BUTTON')return;e.preventDefault();const inputs=[...$('fields').querySelectorAll('input,select,textarea')].filter(input=>!input.closest('.value-picker')&&!input.disabled);const next=inputs[inputs.indexOf(e.target)+1];if(next)next.focus();else $('save-record').focus();};
   $('editor').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();action(()=>persistDraft(e.shiftKey),'editor-error');}});
-  $('delete-record').onclick=()=>action(async()=>{if(!confirm(`¿Eliminar ${state.draft.id} y todas sus imágenes? Esta acción se aplica a la copia local.`))return;const c=structuredClone(state.catalog);c.records=c.records.filter(r=>r.id!==state.draft.id);c.updatedAt=new Date().toISOString();await commit(c);state.draft=null;state.dirty=false;$('editor').close();notice('Ficha eliminada de la copia local.');},'editor-error');
+  $('delete-record').onclick=()=>action(async()=>{if(!confirm(`¿Eliminar ${state.draft.id} y todas sus imágenes? Esta acción se aplica a la copia local.`))return;const c=structuredClone(state.catalog);c.records=c.records.filter(r=>r.id!==state.draft.id);for(const r of c.records)r.documents=r.documents.filter(d=>d.targetId!==state.draft.id);c.updatedAt=new Date().toISOString();await commit(c);state.draft=null;state.dirty=false;$('editor').close();notice('Ficha eliminada de la copia local.');},'editor-error');
   $('image-files').onchange=()=>{const files=[...$('image-files').files];$('image-files').value='';action(async()=>{let added=0;try{for(const file of files){$('editor-error').textContent=`Preparando imagen ${added+1} de ${files.length}…`;const im=await prepareImage(file);state.draft.images.push(im);state.image=state.draft.images.length-1;if(!state.draft.primaryImageId)state.draft.primaryImageId=im.id;markDirty();added++;}}finally{renderMedia();}$('editor-error').textContent='';},'editor-error');};
   $('image-view').oninput=()=>{currentImage().view=$('image-view').value;markDirty();};$('image-caption').oninput=()=>{currentImage().caption=$('image-caption').value;markDirty();};
   $('set-primary').onclick=()=>{state.draft.primaryImageId=currentImage().id;markDirty();renderMedia();};
