@@ -62,3 +62,25 @@ test('records absent from the current source are counted and retained for review
   const c=incorporateInventory(emptyCatalog(),[item(),item({code:'P000020'})]).catalog;
   const result=incorporateInventory(c,[item()]);assert.equal(result.catalog.records.length,2);assert.equal(result.summary.sourceCount,1);assert.equal(result.summary.notPresent,1);
 });
+
+test('guided inventory fills new fields on older records and keeps edits on later reads',()=>{
+  const legacy=incorporateInventory(emptyCatalog(),[item()]).catalog;
+  const source=item({notes:'Comprada con funda',photo_count:0,guided_details:{fields:{
+    Color:'Verde', 'Versión / país':'Italia', Teclado:'QWERTZ',
+  }}});
+  const catalog=incorporateInventory(legacy,[source]).catalog;
+  const record=catalog.records[0];
+  assert.equal(record.color,'Verde');
+  assert.equal(record.country,'Italia');
+  assert.equal(record.keyboardLayout,'QWERTZ');
+  assert.equal(record.inventoryNotes,'Comprada con funda');
+  const edited=saveRecord(catalog,{...record,color:'Gris verdoso',keyboardLayout:''});
+  const updated=incorporateInventory(edited,[{...source,guided_details:{fields:{
+    Color:'Azul', 'Versión / país':'Segunda serie', Teclado:'Inglés',
+  }}}]).catalog.records[0];
+  assert.equal(updated.color,'Gris verdoso');
+  assert.equal(updated.keyboardLayout,'');
+  assert.equal(updated.version,'Segunda serie');
+  assert.equal(updated.keyboardLanguage,'Inglés');
+  assert.equal(incorporateInventory(emptyCatalog(),[source]).catalog.records[0].images.length,0);
+});
