@@ -1,6 +1,7 @@
 import {emptyCatalog,newRecord,normalize,parseCatalog,saveRecord} from './core.js?v=1.5.5';
 import {fieldMap,requiredFields} from './schema.js?v=1.5.5';
 import {INVENTORY_ENDPOINT,inventoryPhoto} from './inventory-source.js?v=1.5.4';
+import {applyCommonFields} from './shared-fields.js?v=1.5.8';
 export {INVENTORY_ENDPOINT};
 const isMachine=value=>/^maquinas? (?:de )?escribir$/.test(normalize(value).trim().replace(/\s+/g,' '));
 const text=value=>value==null?'':String(value);
@@ -47,9 +48,11 @@ export function incorporateInventory(catalog=emptyCatalog(),items){
     if(!/^P\d{6}$/.test(item.code)||seen.has(item.code))throw Error('Hay códigos de máquinas inválidos o repetidos en el inventario.');seen.add(item.code);
     const existing=next.records.find(r=>normalize(r.inventory).trim()===normalize(item.code));
     const r=existing?structuredClone(existing):{...newRecord(next.records),inventory:item.code};
-    const before=JSON.stringify(r),values=mapped(item),previous=r.inventorySource?.fields;
+    const before=JSON.stringify(r),authoritative=Number.isInteger(item.revision)&&item.revision>0;
+    const values=authoritative?applyCommonFields(r,item):mapped(item),previous=r.inventorySource?.fields;
     r.inventory=item.code;
-    for(const [key,value] of Object.entries(values)){
+    if(authoritative)r.destination='Museo';
+    else for(const [key,value] of Object.entries(values)){
       if(r.status==='Catalogada'&&requiredFields.includes(key)&&!value.trim()){if(r[key])summary.conflicts.push({inventory:item.code,field:key});continue;}
       if(!existing||(!Object.hasOwn(previous||{},key)&&!text(r[key]).trim())||(Object.hasOwn(previous||{},key)&&text(r[key])===text(previous[key])))r[key]=value;
       else if(previous&&r[key]!==value&&previous[key]!==value)summary.conflicts.push({inventory:item.code,field:key});
@@ -62,7 +65,7 @@ export function incorporateInventory(catalog=emptyCatalog(),items){
       if(!r.images.some(im=>im.id===id))r.images.push({id,name:`${item.code}${index>1?`-${index}`:''}.jpg`,view:index===1?'General':'Otro',caption:'Foto del inventario',src:inventoryPhoto(item.code,index)});
       if(!r.primaryImageId)r.primaryImageId=id;
     }
-    r.inventorySource={system:'prodigo-inventario',code:item.code,scope:'museo',fields:values,photoCount:Math.max(oldCount,photoCount)};
+    r.inventorySource={system:'prodigo-inventario',code:item.code,scope:'museo',fields:values,photoCount:Math.max(oldCount,photoCount),...(authoritative?{revision:item.revision}:{})};
     if(!existing){next=saveRecord(next,r);summary.added++;}
     else if(JSON.stringify(r)!==before){next=saveRecord(next,r);summary.updated++;}
     else summary.unchanged++;

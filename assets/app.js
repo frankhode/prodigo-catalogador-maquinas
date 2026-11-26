@@ -1,7 +1,8 @@
-import * as shared from './supabase-catalog.js?v=1.5.5';
+import * as shared from './supabase-catalog.js?v=1.5.8';
+import {sharedPatch,stripSharedFields,applyCommonFields,hydrateSharedRecord} from './shared-fields.js?v=1.5.8';
 import {vocabularyFor} from './vocabulary.js?v=1.4.2';
 import {attachCombo,closePicker} from './combo.js?v=1.4.2';
-import {incorporateInventory} from './inventory.js?v=1.5.7';
+import {incorporateInventory} from './inventory.js?v=1.5.8';
 import {relationCandidates,searchRelations} from './relations.js?v=1.5.6';
 import {centralFields,fields,fieldMap,bulkFields,manufactureFields,standaloneDocumentFields,optionalFields,observationFields} from './schema.js?v=1.5.5';
 import {emptyCatalog,newRecord,identificationDraft,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js?v=1.5.5';
@@ -61,7 +62,7 @@ function openRecord(id,queue){
   state.queue=queue||state.visible.map(r=>r.id);
   state.image=Math.max(0,state.draft.images.findIndex(im=>im.id===state.draft.primaryImageId));
   $('editor-error').textContent='';$('record-id').textContent=`${state.draft.inventory||'SIN INVENTARIO'} · FICHA ${state.draft.id}`;$('editor-title').textContent=title(state.draft);$('delete-record').hidden=true;
-  $('record-source').hidden=!state.draft.inventorySource;$('record-source').textContent=`Inventario ${state.draft.inventory} · Podés corregir los datos en esta ficha. Las correcciones se guardan en el catálogo.`;
+  $('record-source').hidden=!state.draft.inventorySource;$('record-source').textContent=`Inventario ${state.draft.inventory} · Podés corregir los datos en esta ficha. Los datos comunes se guardan directamente en el inventario.`;
   renderIdentification();renderMedia();if(!$('editor').open)$('editor').showModal();if(!matchMedia('(max-width:700px)').matches)focusField();
 }
 function focusField(){requestAnimationFrame(()=>{$('fields').querySelector('input,select,textarea,button')?.focus({preventScroll:true});});}
@@ -127,12 +128,28 @@ function renderDocuments(form){
    panel.append(search,count,results,more,cancel);actions.replaceWith(panel);render();search.focus();
  },'editor-error');
 }
+function renderLegacyFields(form){
+  const alternatives=Object.entries(state.draft.legacySharedFields||{});
+  if(!alternatives.length)return;
+  const panel=node('div','field-control wide');
+  panel.append(node('strong','','Correcciones anteriores a la unificación'),node('p','','Estos valores anteriores se conservaron para revisar. El campo muestra el dato actual del inventario.'));
+  for(const [key,value] of alternatives){
+    const row=node('div','field-control wide');
+    row.append(node('span','',(fieldMap.get(key)?.[1]||key)+': '+(value||'(vacío)')));
+    const use=node('button','','Usar valor anterior'),discard=node('button','','Conservar valor actual');
+    use.type=discard.type='button';
+    const resolve=apply=>{if(apply)state.draft[key]=value;delete state.draft.legacySharedFields[key];markDirty();renderIdentification();};
+    use.onclick=()=>resolve(true);discard.onclick=()=>resolve(false);row.append(use,discard);panel.append(row);
+  }
+  form.append(panel);
+}
 function renderIdentification(){
   closePicker();
   const form=$('fields');form.replaceChildren();
+  if(state.tab===0)renderLegacyFields(form);
   let nav=$('catalog-tabs');if(!nav){nav=node('nav','catalog-tabs');nav.id='catalog-tabs';form.before(nav);}nav.replaceChildren();for(const [i,label] of tabs.entries()){const b=node('button',state.tab===i?'primary':'',String(i+1)+'. '+label);if(![0,1,4].includes(i)){b.classList.add('preview-tab');b.title='Solo consulta';}b.setAttribute('data-tab-number',String(i+1));b.setAttribute('aria-label',label+(![0,1,4].includes(i)?' (solo consulta)':''));b.setAttribute('aria-current',state.tab===i?'true':'false');b.type='button';b.disabled=state.draft.recordKind==='document'&&i===1;b.onclick=()=>{state.tab=i;renderIdentification();};nav.append(b);}
  $('identification-title').textContent=tabs[state.tab||0]+(state.tab===0?' · Obligatoria':[1,4].includes(state.tab)?' · Optativa':' · Solo consulta');
- if(state.tab===4)renderDocuments(form);else for(const def of (state.tab===0?(state.draft.recordKind==='document'?standaloneDocumentFields:centralFields):state.tab===1?manufactureFields:optionalFields[state.tab]))form.append(fieldControl(def,state.draft[def[0]],value=>{state.draft[def[0]]=value;markDirty();}));
+ if(state.tab===4)renderDocuments(form);else for(const def of (state.tab===0?(state.draft.recordKind==='document'?standaloneDocumentFields:centralFields):state.tab===1?manufactureFields.filter(def=>def[0]!=='type'):optionalFields[state.tab]))form.append(fieldControl(def,state.draft[def[0]],value=>{state.draft[def[0]]=value;markDirty();}));
   const note=observationFields[state.tab||0];form.append(fieldControl(note,state.draft[note[0]],value=>{state.draft[note[0]]=value;markDirty();}));
   document.querySelector('.entry').scrollTo(0,0);
 }
@@ -160,7 +177,7 @@ async function saveOnline(errorId='notice'){
   await action(async()=>{const sha=await github.writeRemote(state.catalog,state.remoteSha);await commit(state.catalog,{sha,remoteDirty:false});notice('Catalogación guardada en data/catalogo.json de GitHub.');},errorId);
 }
 function sharedPayload(r,catalog){
-  const payload=structuredClone(r);delete payload.id;delete payload.updatedAt;delete payload.createdAt;
+  const payload=stripSharedFields(r);delete payload.id;delete payload.updatedAt;delete payload.createdAt;
   payload.documents=(payload.documents||[]).map(d=>{if(!d.targetId)return d;const target=catalog.records.find(x=>x.id===d.targetId);const code=target?.inventory||d.targetId;if(!/^P[0-9]{6}$/.test(code))throw Error('La ficha '+r.inventory+' tiene una relación sin número P definitivo.');return {...d,targetId:code};});
   return payload;
 }
@@ -171,18 +188,27 @@ async function refreshProduction(){
     const [rows,items]=await Promise.all([shared.readShared(),shared.readMachineInventory()]);
     const c=structuredClone(state.catalog);
     c.sharedRevisions={};
+    const itemsByCode=new Map(items.map(item=>[item.code,item]));
     for(const row of rows){
       const index=c.records.findIndex(r=>r.inventory===row.inventory_code);
       const existing=c.records[index]||newRecord(c.records);
       const record={...existing,...row.payload,inventory:row.inventory_code};
+      if(row.payload.sharedInventoryVersion)record.legacySharedFields=row.payload.legacySharedFields||{};
       if(!row.payload.inventorySource && state.catalog.sharedRevisions?.[row.inventory_code]!==row.revision) {
         delete record.inventorySource;
       }
+      hydrateSharedRecord(record,itemsByCode.get(row.inventory_code));
       if(index>=0)c.records[index]=record;else c.records.push(record);
       c.sharedRevisions[row.inventory_code]=row.revision;
     }
     const {catalog,summary}=incorporateInventory(c,items);
-    await commit(catalog,{remoteDirty:false});state.sharedReady=true;render();
+    await commit(catalog,{remoteDirty:false});
+    try{await shared.writeShared([]);}catch(e){
+      $('shared-state').textContent='Guardado compartido todavía no disponible.';
+      $('inventory-state').textContent=summary.sourceCount+' máquinas del Museo · solo lectura';
+      notice(e.message,true);render();return;
+    }
+    state.sharedReady=true;render();
     state.inventoryCheckedAt=new Date().toISOString();
     $('inventory-state').textContent=`${summary.sourceCount} máquinas en Museo · ${summary.added} nuevas · ${summary.updated} actualizadas`;
     $('shared-state').textContent=rows.length+' fichas compartidas · conexión activa.';
@@ -195,11 +221,17 @@ async function refreshProduction(){
 async function saveProduction(c,records){
   if(!state.sharedReady)throw Error('Conexión al catálogo compartido no confirmada.');
   c.sharedRevisions??={};
-  const entries=records.map(r=>({code:r.inventory,revision:c.sharedRevisions[r.inventory]||0,payload:sharedPayload(r,c)}));
+  const entries=records.map(r=>({code:r.inventory,revision:c.sharedRevisions[r.inventory]||0,payload:sharedPayload(r,c),...sharedPatch(r)}));
   if(entries.some(e=>!/^P[0-9]{6}$/.test(e.code||'')))throw Error('Cada ficha debe tener un número P definitivo.');
   const saved=await shared.writeShared(entries);
   if(!Array.isArray(saved)||saved.length!==entries.length)throw Error('No se pudo confirmar el guardado en Supabase.');
-  for(const row of saved)c.sharedRevisions[row.inventory_code]=row.revision;
+  for(const row of saved){
+    c.sharedRevisions[row.inventory_code]=row.revision;
+    const r=c.records.find(record=>record.inventory===row.inventory_code);
+    if(!r||!row.inventory)throw Error('Respuesta de inventario incompleta. Actualizá antes de seguir.');
+    const values=applyCommonFields(r,row.inventory);
+    r.inventorySource={...r.inventorySource,fields:values,revision:row.inventory.revision};
+  }
   try{await commit(c,{remoteDirty:false});}catch(e){state.catalog=c;state.sharedReady=false;throw Error('Supabase confirmó el guardado, pero falló la copia local. Recargá antes de continuar.');}
 }
 function bind(){
@@ -239,7 +271,7 @@ function bind(){
   $('bulk-open').onclick=()=>{$('bulk-summary').textContent=`${state.selected.size} máquinas seleccionadas: ${[...state.selected].slice(0,6).join(', ')}${state.selected.size>6?'…':''}`;$('bulk-error').textContent='';$('bulk-value').value='';bulkOptions();$('bulk-dialog').showModal();};
   $('bulk-field').onchange=bulkOptions;
   $('bulk-form').onsubmit=e=>{e.preventDefault();action(async()=>{const key=$('bulk-field').value,value=$('bulk-value').value.trim();if(!value)throw Error('Ingresá un valor.');if(!confirm(`¿Aplicar «${value}» a ${state.selected.size} máquinas?`))return;let next=state.catalog;for(const id of state.selected){const r=structuredClone(next.records.find(r=>r.id===id));r[key]=value;next=saveRecord(next,r);}await saveProduction(next,next.records.filter(r=>state.selected.has(r.id)));state.selected.clear();$('bulk-dialog').close();render();notice('Cambio aplicado a las fichas seleccionadas.');},'bulk-error');};
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!state.busy&&!$('editor').open&&Date.now()-new Date(state.inventoryCheckedAt||0).getTime()>60000)action(refreshProduction);});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!state.busy&&!$('editor').open&&!$('bulk-dialog').open)action(refreshProduction);});
   window.addEventListener('beforeunload',e=>{if(isDirty()){e.preventDefault();e.returnValue='';}});
 }
 function bulkOptions(){closePicker();}

@@ -20,7 +20,7 @@ Para uso local: descargar el repositorio y ejecutar `python -m http.server 8000`
 
 Al abrir el catalogador se consulta siempre el inventario actual, aunque ya haya fichas guardadas en este navegador o en GitHub. También se actualiza al volver a la pestaña si pasó más de un minuto, siempre que no haya una ficha abierta. **Actualizar inventario** vuelve a consultar el origen: incorpora nuevas máquinas, completa campos vacíos de fichas existentes y actualiza valores que siguen iguales a su última lectura. Si modificaste un valor en el catalogador, se conserva tu edición. Nunca se borran fichas por haber dejado de aparecer en el origen. La operación completa se valida antes de guardar la copia de trabajo. Se muestra la fecha/hora de consulta y la cantidad de máquinas presentes en el origen. Las fichas que ya no aparecen allí se conservan y se cuentan aparte; no se eliminan ediciones del catalogador. Si la lectura falla, se informa el error y se conserva la copia anterior.
 
-El código P vinculado queda fijo. El número M identifica únicamente la ficha dentro del JSON. Se conserva marca, modelo, fecha y tipo; la numeración original del inventario tiene un campo propio porque puede ser una serie u otro número. Los campos ampliados, documentos y decisiones de imagen pertenecen al catalogador. `inventorySource` guarda el origen y los valores de la última lectura para comparar sin pisar correcciones.
+El código P vinculado queda fijo. El número M identifica únicamente la ficha dentro del JSON. Los datos comunes (marca, modelo, fecha, tipo, serie, etc.) se leen del inventario; desde 1.5.8 se guardan también en él. Los campos ampliados y las relaciones documentales pertenecen al catalogador. `inventorySource` conserva una instantánea local de la última lectura para detectar cambios y conflictos.
 
 Las fotos del inventario se guardan como enlaces a la consulta pública, con su principal y adicionales. Requieren conexión y disponibilidad del origen. Los archivos agregados desde el catalogador sí quedan incrustados y optimizados en el JSON. Quitar una foto del catalogador no la quita del inventario ni vuelve a agregarla en la siguiente lectura. El respaldo JSON conserva los enlaces; no contiene una copia de esas fotos remotas.
 
@@ -48,7 +48,7 @@ La ficha abre directamente en una única pantalla, sin las siete pestañas anter
 
 Las fichas de máquinas parten de la denominación «Máquina de escribir». Versión y colección se completan al catalogar: las sugerencias no se asignan automáticamente. Los ejemplos de la referencia no reemplazan los códigos ni los datos de los ejemplares.
 
-Los valores de las antiguas secciones, incluidos documentos, notas y procedencias, siguen conservados en el JSON, las exportaciones y los guardados, aunque ya no se muestran en esta pantalla. La numeración original del inventario tampoco se convierte automáticamente en número de serie, porque puede representar otro número.
+Los valores de las antiguas secciones, incluidos documentos, notas y procedencias, siguen conservados en el JSON, las exportaciones y los guardados, aunque ya no se muestran en esta pantalla. A partir de 1.5.8, para las máquinas el número cargado en el inventario se muestra como número de serie; se conserva la numeración histórica distinta consignada por separado.
 
 Las definiciones y sugerencias están en `assets/schema.js`. Las listas aprendidas se guardan en `vocabularies` dentro del JSON. Incluyen los campos de identificación y la vista/descripción de imágenes. Se conservan además las listas anteriores. Las opciones se recuperan también de las fichas ya cargadas, sin tener que migrarlas. Cada campo conserva su lista independiente; se evitan opciones duplicadas que sólo cambian mayúsculas, tildes o espacios. La selección reutiliza el texto guardado sin reescribir los registros anteriores.
 
@@ -85,3 +85,14 @@ Las imágenes agregadas se incluyen como WebP en el propio JSON para que el resp
 - `assets/app.js`: interfaz y recorridos; `core.js`: reglas del catálogo; `storage.js`: copia local; `github.js`: lectura/escritura online; `media.js`: imágenes.
 
 El JSON compartido contiene la base inicial del inventario y se actualiza leyendo el origen y guardando en GitHub. No se inventan máquinas ni dataciones de ejemplo.
+
+
+## Identificación compartida con Inventario (1.5.8)
+
+**Activación en Supabase:** ejecutar una vez [`supabase/202611260002_shared_machine_fields.sql`](supabase/202611260002_shared_machine_fields.sql) en el mismo proyecto, después de las migraciones de catálogo y carga asistida. No modifica registros existentes: agrega el RPC autenticado de guardado conjunto y retira el permiso de la versión anterior. Recargar ambas aplicaciones. Hasta activarlo el catalogador queda en modo consulta.
+
+- `inventory_items` es la fuente única de marca, modelo, año, número de serie, notas del inventario, color, versión (columna existente `type`), país de fabricación, idioma y distribución del teclado. Al guardar desde la ficha M se actualizan solamente los campos comunes modificados en el objeto P, con control de la revisión de inventario y de catálogo en una única transacción. Los campos comunes ya no se guardan en el payload de las fichas nuevas.
+- Para máquinas, `original_number` se presenta como número de serie. «Numeración original del inventario» queda separado para una numeración histórica diferente, aportada explícitamente en catalogación. No se renumeran los objetos P. Si el número legado de una máquina no era realmente una serie, revisarlo manualmente.
+- Versión/país y teclado legados se leen sin modificar la base. Al editar un par en cualquiera de las interfaces, se graban sus campos independientes (`type` para versión y `País` para país). Los nombres de países e idiomas reconocidos se ubican en el campo correspondiente; lo demás se conserva como versión o distribución.
+- Los datos exclusivos de catalogación (estado, colección, documentación, observaciones, etc.) permanecen en `machine_catalog_records`. Una ficha anterior que tuviera correcciones divergentes ofrece revisar los valores antiguos sin pisar silenciosamente el inventario; se puede elegir el valor anterior o mantener el actual.
+- Si otra persona editó el objeto o la ficha después de abrirla, se rechaza el guardado entero. Refrescar para leer la última versión y aplicar la corrección. No se crean números P desde el catalogador ni se cambian fotos, destino o estado de etiquetado mediante este flujo.

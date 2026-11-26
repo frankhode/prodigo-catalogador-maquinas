@@ -16,7 +16,7 @@ export async function readMachineInventory(){
   const c=await client(),items=[];
   for(let offset=0;;offset+=200){
     const page=check(await c.from('inventory_items')
-      .select('code,category,brand,model,manufacture_date,type,original_number,notes,photo_path,extra_photos,guided_details')
+      .select('code,category,brand,model,manufacture_date,type,original_number,notes,photo_path,extra_photos,guided_details,revision')
       .eq('destination','museo').order('code').range(offset,offset+199));
     items.push(...page.map(({photo_path,extra_photos,...item})=>({
       ...item,photo_count:photo_path ? 1+(extra_photos?.length||0) : 0,
@@ -34,5 +34,7 @@ export async function readShared(){
 export async function writeShared(records){
   const c=await client();
   if(records.length>500)throw Error('El lote supera 500 fichas. Dividí la migración.');
-  return check(await c.rpc('save_machine_catalog_records',{p_records:records}));
+  const result=await c.rpc('save_machine_catalog_shared',{p_records:records});
+  if(result.error?.code==='PGRST202')throw Error('Falta activar la migración 202611260002 en Supabase. Los cambios todavía no se guardaron.');
+  return check(result);
 }
