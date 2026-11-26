@@ -1,7 +1,8 @@
 import * as shared from './supabase-catalog.js?v=1.5.5';
 import {vocabularyFor} from './vocabulary.js?v=1.4.2';
 import {attachCombo,closePicker} from './combo.js?v=1.4.2';
-import {incorporateInventory,readInventory} from './inventory.js?v=1.5.5';
+import {incorporateInventory} from './inventory.js?v=1.5.5';
+import {relationCandidates,searchRelations} from './relations.js?v=1.5.6';
 import {centralFields,fields,fieldMap,bulkFields,manufactureFields,standaloneDocumentFields,optionalFields,observationFields} from './schema.js?v=1.5.5';
 import {emptyCatalog,newRecord,identificationDraft,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js?v=1.5.5';
 import {readLocal,writeLocal,download} from './storage.js?v=1.4.2';
@@ -80,7 +81,22 @@ const docTypes=['Manual de uso','Manual de reparación','Libro','Catálogo comer
 function allDocuments(){return [...state.catalog.records,...(state.pendingDocs||[])];}
 const relationTypes=['Pertenece al ejemplar','No pertenece al ejemplar'];
 function addLink(target,type,relation){if(target===state.draft.id)return;const links=state.draft.documents; const existing=links.find(d=>d.targetId===target);if(existing){existing.relation=relation;markDirty();}else{links.push({targetId:target,type,relation});markDirty();}renderIdentification();}
-function chooseRelation(target,type){const form=$('fields'),panel=node('div','field-control wide'),select=node('select'),save=node('button','','Confirmar relación');select.append(option('','Seleccionar tipo de relación'),...relationTypes.map(t=>option(t)));save.type='button';save.onclick=()=>{if(!relationTypes.includes(select.value)){$('editor-error').textContent='Seleccioná el tipo de relación.';return;}$('editor-error').textContent='';addLink(target,type,select.value);};panel.append(node('label','','Tipo de relación'),select,save);form.append(panel);select.focus();}
+function relationPreview(candidate){
+  const photo=node('span','relation-photo'),placeholder=node('span','relation-placeholder','Sin foto');
+  placeholder.hidden=Boolean(candidate.photo);photo.append(placeholder);
+  if(candidate.photo){const img=node('img');img.alt='';img.loading='lazy';img.decoding='async';img.onerror=()=>{img.remove();placeholder.hidden=false;};img.src=candidate.photo;photo.append(img);}
+  const info=node('span','relation-info');info.append(node('strong','',candidate.label));
+  if(candidate.detail)info.append(node('small','',candidate.detail));
+  return [photo,info];
+}
+function chooseRelation(target,type,picker,candidate){
+  const form=$('fields'),panel=node('div','field-control wide'),select=node('select'),save=node('button','','Confirmar relación');select.append(option('','Seleccionar tipo de relación'),...relationTypes.map(t=>option(t)));save.type='button';
+  if(candidate){const preview=node('div','relation-result relation-selected');preview.append(...relationPreview(candidate));panel.append(preview);}
+  save.onclick=()=>{if(!relationTypes.includes(select.value)){$('editor-error').textContent='Seleccioná el tipo de relación.';return;}$('editor-error').textContent='';addLink(target,type,select.value);};
+  const cancel=node('button','subtle','Cancelar');cancel.type='button';cancel.onclick=()=>{$('editor-error').textContent='';renderIdentification();};
+  panel.append(node('label','','Tipo de relación'),select,save,cancel);
+  if(picker)picker.replaceWith(panel);else form.append(panel);select.focus();
+}
 function linkCode(code){const existing=allDocuments().find(r=>r.inventory===code);chooseRelation(existing?.id||code,existing?.documentType||'Objeto de inventario');}
 function renderDocuments(form){
  const intro=node('div','field-control wide');const description=node('em','','Material complementario, manuales, garantías, otros objetos de la colección vinculados, etc.');description.style.fontSize='13px';description.style.color='var(--muted)';intro.append(description);form.append(intro);
@@ -89,7 +105,27 @@ function renderDocuments(form){
  for(const r of allDocuments().filter(r=>r.id!==state.draft.id&&r.documents?.some(d=>d.targetId===state.draft.id||d.targetId===state.draft.inventory))){const row=node('div','field-control wide');row.append(node('span','','Relación entrante: '+(r.inventory||r.id)+' · '+(r.documentTitle||title(r))));form.append(row);}
  const actions=node('div','field-control wide');const create=node('button','','＋ Nuevo inventario documental'),link=node('button','','Vincular inventario existente');create.type=link.type='button';actions.append(create,link);form.append(actions);
  create.onclick=()=>{const request=crypto.randomUUID(),source=state.draft.id;const url=new URL('https://frankhode.github.io/Prodigo_inventario/');url.searchParams.set('derived',request);const popup=window.open(url.href,'_blank');if(!popup){$('editor-error').textContent='Permití abrir una nueva pestaña para inventariar.';return;}const receive=event=>{if(event.origin!==url.origin||event.source!==popup||event.data?.type!=='prodigo-inventory-created'||event.data.request!==request||!/^P\\d{6}$/.test(event.data.code))return;window.removeEventListener('message',receive);if(state.draft?.id!==source)return;state.tab=4;renderIdentification();linkCode(event.data.code);};window.addEventListener('message',receive);const panel=node('div','field-control wide'),code=node('input'),manual=node('button','','Vincular número asignado');code.placeholder='P000000';manual.type='button';manual.onclick=()=>{if(!/^P\\d{6}$/.test(code.value.trim())){$('editor-error').textContent='Ingresá un código P válido.';return;}window.removeEventListener('message',receive);linkCode(code.value.trim());};panel.append(node('p','','Inventariá en la nueva pestaña. Al guardar se recuperará el número P. Si no vuelve automáticamente, ingresalo acá.'),code,manual);actions.after(panel);};
- link.onclick=()=>action(async()=>{let items=[];try{items=await readInventory();}catch(e){$('editor-error').textContent='No se pudo consultar el inventario; se muestran las fichas locales.';}const panel=node('div','field-control wide'),search=node('input'),results=node('div');search.placeholder='Buscar número P, título, marca o categoría';panel.append(search,results);actions.replaceWith(panel);const candidates=[...allDocuments().filter(r=>r.id!==state.draft.id).map(r=>({id:r.id,label:[r.inventory||r.id,r.documentTitle||title(r)].join(' · '),type:r.documentType||'Documento relacionado'})),...items.filter(i=>i.code!==state.draft.inventory&&!allDocuments().some(r=>r.inventory===i.code)).map(i=>({id:i.code,label:[i.code,i.category,i.brand,i.model,i.type].filter(Boolean).join(' · '),type:i.category||'Documento relacionado'}))];const render=()=>{results.replaceChildren();const q=normalize(search.value);for(const c of candidates.filter(c=>normalize(c.label).includes(q)).slice(0,50)){const button=node('button','',c.label);button.type='button';button.onclick=()=>chooseRelation(c.id,c.type);results.append(button);}};search.oninput=render;render();},'editor-error');
+ link.onclick=()=>action(async()=>{
+   const draft=state.draft;let items=[];
+   try{items=await shared.readMachineInventory();}catch(e){$('editor-error').textContent='No se pudo consultar el inventario; se muestran las fichas locales.';}
+   if(state.draft!==draft||!actions.isConnected)return;
+   const panel=node('div','field-control wide relation-picker'),search=node('input'),results=node('div','relation-results'),count=node('div','relation-count'),more=node('button','subtle','Ver más resultados'),cancel=node('button','subtle','Cancelar');
+   search.type='search';search.placeholder='Buscar en todos los campos…';search.setAttribute('aria-label','Buscar objetos relacionados');
+   search.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();}};
+   results.setAttribute('aria-label','Objetos relacionados');count.setAttribute('aria-live','polite');more.type=cancel.type='button';
+   cancel.onclick=()=>{$('editor-error').textContent='';renderIdentification();};
+   const candidates=relationCandidates(allDocuments(),items,draft);let limit=30;
+   const render=()=>{
+     const matches=searchRelations(candidates,search.value),visible=matches.slice(0,limit);
+     results.replaceChildren(...visible.map(c=>{
+       const button=node('button','relation-result');button.type='button';button.append(...relationPreview(c));button.onclick=()=>chooseRelation(c.id,c.type,panel,c);return button;
+     }));
+     count.textContent=matches.length?('Mostrando '+visible.length+' de '+matches.length):'Sin coincidencias';
+     more.hidden=visible.length===matches.length;
+   };
+   more.onclick=()=>{limit+=30;render();};search.oninput=()=>{limit=30;render();};
+   panel.append(search,count,results,more,cancel);actions.replaceWith(panel);render();search.focus();
+ },'editor-error');
 }
 function renderIdentification(){
   closePicker();

@@ -2,9 +2,9 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {vocabularyFor,matchingTerms,uniqueTerms} from '../assets/vocabulary.js';
 import {emptyCatalog,newRecord,saveRecord,parseCatalog,serialize} from '../assets/core.js';
 import {fields,documentFields} from '../assets/schema.js';
-test('every catalogue and document field remembers values, including long text and original zeroes',()=>{
+test('catalogue and document fields remember values except free-form observations',()=>{
  const r={...newRecord(),...Object.fromEntries(fields.map(([key])=>[key,key==='inventory'?'P000001':key==='status'?'Estado propio':`Valor ${key}`])),serial:'000012-A',notes:'Párrafo primero\nPárrafo segundo',documents:[Object.fromEntries(documentFields.map(([key])=>[key,`Documento ${key}`]))]};
- const c=saveRecord(emptyCatalog(),r);for(const [key] of fields)assert.ok(vocabularyFor(c,key).includes(r[key]),key);for(const [key] of documentFields)assert.ok(vocabularyFor(c,`document.${key}`).includes(r.documents[0][key]),key);assert.equal(c.records[0].serial,'000012-A');assert.deepEqual(parseCatalog(serialize(c)),c);
+ const c=saveRecord(emptyCatalog(),r);for(const [key] of fields){if(key.startsWith('observations'))assert.ok(!vocabularyFor(c,key).includes(r[key]),key);else assert.ok(vocabularyFor(c,key).includes(r[key]),key);}for(const [key] of documentFields)assert.ok(vocabularyFor(c,`document.${key}`).includes(r.documents[0][key]),key);assert.equal(c.records[0].serial,'000012-A');assert.deepEqual(parseCatalog(serialize(c)),c);
 });
 test('lists bootstrap from older records, stay isolated, and include values from the current draft',()=>{
  const c=emptyCatalog();c.records=[{...newRecord(),country:'Suiza',provenance:'Archivo familiar',documents:[{type:'Publicidad',notes:'Nota del documento'}],images:[]}];

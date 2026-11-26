@@ -30,7 +30,7 @@ test('existing P codes are matched without replacing local nonempty fields; miss
 });
 test('inventory source codes cannot be reassigned, remote images accept only exact public photo URLs',()=>{
   const c=incorporateInventory(emptyCatalog(),[item()]).catalog;c.records[0].inventory='P999999';assert.throws(()=>parseCatalog(c),/código P/);
-  assert.ok(safeImage(inventoryPhoto('P000019',2)));for(const url of ['https://evil.com/x.jpg',INVENTORY_ENDPOINT+'?foto=P000019&imagen=9',inventoryPhoto('P000019')+'&redirect=evil',inventoryPhoto('P000019')+'#evil'])assert.equal(safeImage(url),false);
+  assert.ok(safeImage(inventoryPhoto('P000019',2)));assert.ok(safeImage(inventoryPhoto('P000019',13)));for(const url of ['https://evil.com/x.jpg',INVENTORY_ENDPOINT+'?foto=P000019&imagen=0',inventoryPhoto('P000019')+'&redirect=evil',inventoryPhoto('P000019')+'#evil'])assert.equal(safeImage(url),false);
 });
 
 test('an incomplete source update cannot invalidate a catalogued machine',()=>{

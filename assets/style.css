@@ -86,3 +86,15 @@
   #editor-error:empty{display:none}
 }
 @media(max-width:370px){.entry .field-grid{grid-template-columns:1fr}.catalog-tabs button.preview-tab::before{display:none}}
+
+/* Related-object picker: selectable photos with clear full-width touch targets. */
+.relation-results{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:8px}
+.relation-result{display:flex;align-items:center;justify-content:flex-start;gap:12px;min-width:0;min-height:84px;width:100%;text-align:left;padding:7px;font-weight:400}
+.relation-photo{flex:0 0 72px;width:72px;height:72px;display:grid;place-items:center;background:#eeeee7;border-radius:4px;overflow:hidden}
+.relation-photo img{display:block;width:100%;height:100%;object-fit:contain}
+.relation-placeholder{font-size:10px;color:var(--muted);text-align:center}
+.relation-info{display:grid;gap:4px;min-width:0;overflow-wrap:anywhere}
+.relation-info strong{font-size:13px;font-weight:600}
+.relation-info small,.relation-count{font-size:11px;color:var(--muted)}
+.relation-selected{border:1px solid var(--line);border-radius:var(--radius);background:var(--paper)}
+@media(max-width:700px){.relation-results{grid-template-columns:1fr}.relation-result{min-height:88px}.relation-photo{flex-basis:76px;width:76px;height:76px}}
