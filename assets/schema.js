@@ -13,7 +13,7 @@ const previousGroups = [
     ['year','Año de esta máquina','text'], ['modelFrom','Modelo fabricado desde','text'], ['modelTo','Modelo fabricado hasta','text'],
     ['datingSource','Fuente / criterio de datación','area'], ['importer','Importador / distribuidor','combo'],
     ['keyboardLanguage','Idioma del teclado','combo',['Español','Inglés','Francés','Alemán','Italiano','Portugués']],
-    ['keyboardLayout','Distribución y particularidades del teclado','area'], ['typeface','Tipografía, tamaño y muestra de escritura','area'], ['typeCard','Naipe / muestra de caracteres','area']
+    ['keyboardLayout','Tipo de teclado','area'], ['typeface','Tipografía, tamaño y muestra de escritura','area'], ['typeCard','Naipe / muestra de caracteres','area']
   ]},
   {id:'composition',title:'Composición y detalles',fields:[
     ['color','Color','combo',['Negro','Gris','Beige','Verde','Azul','Rojo']], ['body','Cuerpo / materiales','combo'],
