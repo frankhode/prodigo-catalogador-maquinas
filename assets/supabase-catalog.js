@@ -3,12 +3,27 @@ const URL='https://wgtircsltokentekqgdq.supabase.co';
 const KEY='sb_publishable_IiOilYnrWkqTHhvZSLeU_w_F2WS54gi';
 let connection;
 async function client(){
-  if(!connection){const {createClient}=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm');connection=createClient(URL,KEY);}
-  const {data,error}=await connection.auth.getUser();
+  connection??=import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm')
+    .then(({createClient})=>createClient(URL,KEY))
+    .catch(error=>{connection=undefined;throw error;});
+  const supabase=await connection;
+  const {data,error}=await supabase.auth.getUser();
   if(error||!data.user)throw Error('Ingresá primero en la app de inventario con tu usuario de Pródigo y volvé a intentar.');
-  return connection;
+  return supabase;
 }
 function check(result){if(result.error)throw Error(result.error.message);return result.data;}
+export async function readMachineInventory(){
+  const c=await client(),items=[];
+  for(let offset=0;;offset+=200){
+    const page=check(await c.from('inventory_items')
+      .select('code,category,brand,model,manufacture_date,type,original_number,notes,photo_path,extra_photos,guided_details')
+      .eq('destination','museo').order('code').range(offset,offset+199));
+    items.push(...page.map(({photo_path,extra_photos,...item})=>({
+      ...item,photo_count:photo_path ? 1+(extra_photos?.length||0) : 0,
+    })));
+    if(page.length<200)return items;
+  }
+}
 export async function readShared(){
   const c=await client(),rows=[];
   for(let offset=0;;offset+=200){

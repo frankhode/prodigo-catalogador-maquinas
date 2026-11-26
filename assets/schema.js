@@ -5,7 +5,8 @@ const previousGroups = [
     ['model','Modelo','combo'], ['modelNotes','Comentario sobre el modelo','area'],
     ['type','Tipo','combo',['De escritorio','Portátil','Ultraportátil']],
     ['mechanism','Funcionamiento','combo',['Mecánica','Eléctrica','Electrónica']],
-    ['serial','Número de serie','text'], ['status','Estado de catalogación','select',['Borrador','En revisión','Catalogada']]
+    ['serial','Número de serie','text'],
+  ['inventoryOriginalNumber','Numeración original del inventario','text'], ['status','Estado de catalogación','select',['Borrador','En revisión','Catalogada']]
   ]},
   {id:'manufacture',title:'Fabricación y teclado',fields:[
     ['manufacturer','Fabricante','combo'], ['country','País de fabricación','combo',['Argentina','Estados Unidos','Italia','Alemania','Reino Unido','Francia','Suiza','Japón','España']],
@@ -49,11 +50,13 @@ export const centralFields = [
   ['model','Modelo','combo'],
   ['version','Versión','combo',['Por determinar']],
   ['serial','Número de serie','text'],
+  ['inventoryOriginalNumber','Numeración original del inventario','text'],
   ['year','Año de fabricación','text'],
   ['color','Color','combo',['Negro','Gris','Beige','Verde','Azul','Rojo']],
   ['keyboardLanguage','Idioma del teclado','combo',['Español','Inglés','Francés','Alemán','Italiano','Portugués']],
   ['country','País de fabricación','combo',['Argentina','Estados Unidos','Italia','Alemania','Reino Unido','Francia','Suiza','Japón','España']],
-  ['collection','Colección','combo',['Patrimonio mecanográfico']]
+  ['collection','Colección','combo',['Patrimonio mecanográfico']],
+  ['inventoryNotes','Notas del inventario','area']
 ];
 const centralKeys=new Set(centralFields.map(([key])=>key));
 export const legacyFields=previousGroups.flatMap(g=>g.fields).filter(([key])=>!centralKeys.has(key));

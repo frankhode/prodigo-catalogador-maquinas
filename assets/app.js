@@ -1,9 +1,9 @@
-import * as shared from './supabase-catalog.js?v=1.4.3';
+import * as shared from './supabase-catalog.js?v=1.5.5';
 import {vocabularyFor} from './vocabulary.js?v=1.4.2';
 import {attachCombo,closePicker} from './combo.js?v=1.4.2';
-import {refreshFromInventory,readInventory} from './inventory.js?v=1.5.4';
-import {centralFields,fields,fieldMap,bulkFields,manufactureFields,standaloneDocumentFields,optionalFields,observationFields} from './schema.js?v=1.4.2';
-import {emptyCatalog,newRecord,identificationDraft,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js?v=1.5.4';
+import {incorporateInventory,readInventory} from './inventory.js?v=1.5.5';
+import {centralFields,fields,fieldMap,bulkFields,manufactureFields,standaloneDocumentFields,optionalFields,observationFields} from './schema.js?v=1.5.5';
+import {emptyCatalog,newRecord,identificationDraft,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js?v=1.5.5';
 import {readLocal,writeLocal,download} from './storage.js?v=1.4.2';
 import * as github from './github.js?v=1.4.2';
 import {prepareImage,rotateImage} from './media.js?v=1.4.2';
@@ -60,7 +60,7 @@ function openRecord(id,queue){
   state.queue=queue||state.visible.map(r=>r.id);
   state.image=Math.max(0,state.draft.images.findIndex(im=>im.id===state.draft.primaryImageId));
   $('editor-error').textContent='';$('record-id').textContent=`${state.draft.inventory||'SIN INVENTARIO'} · FICHA ${state.draft.id}`;$('editor-title').textContent=title(state.draft);$('delete-record').hidden=true;
-  $('record-source').hidden=!state.draft.inventorySource;$('record-source').textContent=`Inventario ${state.draft.inventory} · Solo lectura del origen. Los cambios catalográficos se guardan en Supabase.`;
+  $('record-source').hidden=!state.draft.inventorySource;$('record-source').textContent=`Inventario ${state.draft.inventory} · Podés corregir los datos en esta ficha. Las correcciones se guardan en el catálogo.`;
   renderIdentification();renderMedia();if(!$('editor').open)$('editor').showModal();if(!matchMedia('(max-width:700px)').matches)focusField();
 }
 function focusField(){requestAnimationFrame(()=>{$('fields').querySelector('input,select,textarea,button')?.focus({preventScroll:true});});}
@@ -118,34 +118,43 @@ async function persistDraft(next=false){
   if(next&&nextId&&nextId!==r.id){openRecord(nextId,state.queue);}else{state.draft=null;$('editor').close();notice(next?'Ficha guardada. Terminaste el recorrido.':'Ficha guardada en Supabase.');}
 }
 function exportCatalog(){let c=state.catalog;if(state.draft&&state.dirty){const draft=structuredClone(state.draft);draft.status=missing(draft).length?'Borrador':draft.status;for(const doc of state.pendingDocs||[])if(draft.documents.some(d=>d.targetId===doc.id))c=saveRecord(c,doc);c=saveRecord(c,draft);}download(serialize(c),`prodigo-maquinas-${new Date().toLocaleDateString('en-CA')}.json`);}
-async function refreshInventory(){
-  $('inventory-state').textContent='Leyendo máquinas del inventario…';
-  try{
-    const result=await refreshFromInventory(state.catalog);
-    if(result.summary.added||result.summary.updated)await commit(result.catalog);
-    const s=result.summary;state.inventoryCheckedAt=result.checkedAt;
-    const checked=new Date(result.checkedAt).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'medium'});
-    $('inventory-state').textContent=`Consultado ${checked} · ${s.sourceCount} máquinas en Museo · ${s.added} nuevas · ${s.updated} actualizadas${s.notPresent?` · ${s.notPresent} fichas previas conservadas fuera de la lectura actual`:''}`;
-    notice('Inventario actualizado.');
-  }catch(e){$('inventory-state').textContent='Inventario no disponible. Tu catálogo JSON se conserva.';throw e;}
-}
 function requestGithubConnection(){state.saveAfterConnect=true;$('token').value='';$('connection-error').textContent='';$('connection').showModal();}
 async function saveOnline(errorId='notice'){
   if(!github.connected()){requestGithubConnection();return;}
   await action(async()=>{const sha=await github.writeRemote(state.catalog,state.remoteSha);await commit(state.catalog,{sha,remoteDirty:false});notice('Catalogación guardada en data/catalogo.json de GitHub.');},errorId);
 }
 function sharedPayload(r,catalog){
-  const payload=structuredClone(r);delete payload.id;delete payload.inventorySource;delete payload.updatedAt;delete payload.createdAt;
+  const payload=structuredClone(r);delete payload.id;delete payload.updatedAt;delete payload.createdAt;
   payload.documents=(payload.documents||[]).map(d=>{if(!d.targetId)return d;const target=catalog.records.find(x=>x.id===d.targetId);const code=target?.inventory||d.targetId;if(!/^P[0-9]{6}$/.test(code))throw Error('La ficha '+r.inventory+' tiene una relación sin número P definitivo.');return {...d,targetId:code};});
   return payload;
 }
-async function loadProduction(){
+async function refreshProduction(){
   state.sharedReady=false;
-  const rows=await shared.readShared(),c=structuredClone(state.catalog);
-  c.sharedRevisions={};
-  for(const row of rows){const existing=c.records.find(r=>r.inventory===row.inventory_code);const record={...(existing||newRecord(c.records)),...row.payload,inventory:row.inventory_code};if(existing)c.records[c.records.indexOf(existing)]=record;else c.records.push(record);c.sharedRevisions[row.inventory_code]=row.revision;}
-  await commit(parseCatalog(c),{remoteDirty:false});state.sharedReady=true;render();
-  $('shared-state').textContent=rows.length+' fichas compartidas · conexión activa.';
+  $('inventory-state').textContent='Leyendo máquinas del inventario…';
+  try{
+    const [rows,items]=await Promise.all([shared.readShared(),shared.readMachineInventory()]);
+    const c=structuredClone(state.catalog);
+    c.sharedRevisions={};
+    for(const row of rows){
+      const index=c.records.findIndex(r=>r.inventory===row.inventory_code);
+      const existing=c.records[index]||newRecord(c.records);
+      const record={...existing,...row.payload,inventory:row.inventory_code};
+      if(!row.payload.inventorySource && state.catalog.sharedRevisions?.[row.inventory_code]!==row.revision) {
+        delete record.inventorySource;
+      }
+      if(index>=0)c.records[index]=record;else c.records.push(record);
+      c.sharedRevisions[row.inventory_code]=row.revision;
+    }
+    const {catalog,summary}=incorporateInventory(c,items);
+    await commit(catalog,{remoteDirty:false});state.sharedReady=true;render();
+    state.inventoryCheckedAt=new Date().toISOString();
+    $('inventory-state').textContent=`${summary.sourceCount} máquinas en Museo · ${summary.added} nuevas · ${summary.updated} actualizadas`;
+    $('shared-state').textContent=rows.length+' fichas compartidas · conexión activa.';
+    notice('Inventario y catálogo compartido actualizados.');
+  }catch(e){
+    $('inventory-state').textContent='Inventario no disponible. Tu catálogo local se conserva.';
+    throw e;
+  }
 }
 async function saveProduction(c,records){
   if(!state.sharedReady)throw Error('Conexión al catálogo compartido no confirmada.');
@@ -157,7 +166,6 @@ async function saveProduction(c,records){
   for(const row of saved)c.sharedRevisions[row.inventory_code]=row.revision;
   try{await commit(c,{remoteDirty:false});}catch(e){state.catalog=c;state.sharedReady=false;throw Error('Supabase confirmó el guardado, pero falló la copia local. Recargá antes de continuar.');}
 }
-async function refreshProduction(){await refreshInventory();await loadProduction();notice('Inventario y catálogo compartido actualizados.');}
 function bind(){
   const mobile=matchMedia('(max-width:700px)');const filterPanel=document.querySelector('.mobile-filters');const photoToggle=$('mobile-photo-toggle');const photoPanel=document.querySelector('.media');if(mobile.matches)filterPanel.open=false;mobile.addEventListener('change',e=>{filterPanel.open=!e.matches;});photoToggle.onclick=()=>{const collapsed=photoPanel.classList.toggle('photo-collapsed');photoToggle.setAttribute('aria-expanded',String(!collapsed));photoToggle.textContent=collapsed?'Foto ▸':'Foto ▾';};
   $('shared-read').onclick=()=>action(refreshProduction,'data-error');

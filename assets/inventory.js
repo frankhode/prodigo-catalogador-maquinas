@@ -1,10 +1,24 @@
-import {emptyCatalog,newRecord,normalize,parseCatalog,saveRecord} from './core.js?v=1.5.4';
-import {requiredFields} from './schema.js?v=1.4.2';
+import {emptyCatalog,newRecord,normalize,parseCatalog,saveRecord} from './core.js?v=1.5.5';
+import {fieldMap,requiredFields} from './schema.js?v=1.5.5';
 import {INVENTORY_ENDPOINT,inventoryPhoto} from './inventory-source.js?v=1.5.4';
 export {INVENTORY_ENDPOINT};
 const isMachine=value=>/^maquinas? (?:de )?escribir$/.test(normalize(value).trim().replace(/\s+/g,' '));
 const text=value=>value==null?'':String(value);
-function mapped(item){return {brand:text(item.brand),model:text(item.model),year:text(item.manufacture_date),type:text(item.type),inventoryOriginalNumber:text(item.original_number),destination:'Museo'};}
+function mapped(item){
+  const values={brand:text(item.brand),model:text(item.model),year:text(item.manufacture_date),
+    type:text(item.type),inventoryOriginalNumber:text(item.original_number),destination:'Museo'};
+  if (Object.hasOwn(item,'notes')) values.inventoryNotes=text(item.notes);
+  if (Object.hasOwn(item,'guided_details')) {
+    const details=item.guided_details?.fields;
+    const version=text(details?.['Versión / país']).trim();
+    const keyboard=text(details?.Teclado).trim();
+    const match=(key,value)=>fieldMap.get(key)[3].find(option=>normalize(option)===normalize(value))||'';
+    const country=match('country',version),language=match('keyboardLanguage',keyboard);
+    Object.assign(values,{color:text(details?.Color),country,version:country?'':version,
+      keyboardLanguage:language,keyboardLayout:language?'':keyboard});
+  }
+  return values;
+}
 export async function readInventory(fetchImpl=globalThis.fetch){
   const items=[],codes=new Set(),requestId=`${Date.now()}-${Math.random().toString(36).slice(2)}`;let after='';
   for(let page=0;page<1000;page++){
@@ -36,11 +50,11 @@ export function incorporateInventory(catalog=emptyCatalog(),items){
     r.inventory=item.code;
     for(const [key,value] of Object.entries(values)){
       if(r.status==='Catalogada'&&requiredFields.includes(key)&&!value.trim()){if(r[key])summary.conflicts.push({inventory:item.code,field:key});continue;}
-      if(!existing||(!previous&&!text(r[key]).trim())||(previous&&r[key]===previous[key]))r[key]=value;
+      if(!existing||(!Object.hasOwn(previous||{},key)&&!text(r[key]).trim())||(Object.hasOwn(previous||{},key)&&text(r[key])===text(previous[key])))r[key]=value;
       else if(previous&&r[key]!==value&&previous[key]!==value)summary.conflicts.push({inventory:item.code,field:key});
     }
     // Keep original numeration separate: it may be a serial OR a collector's number.
-    const photoCount=Number.isSafeInteger(item.photo_count)&&item.photo_count>=1?item.photo_count:1;
+    const photoCount=Number.isSafeInteger(item.photo_count)&&item.photo_count>=0?item.photo_count:1;
     const oldCount=r.inventorySource?.photoCount||0;
     for(let index=oldCount+1;index<=photoCount;index++){
       const id=`inventory-${item.code}-${index}`;
