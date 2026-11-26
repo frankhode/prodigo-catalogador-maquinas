@@ -6,15 +6,16 @@ const isMachine=value=>/^maquinas? (?:de )?escribir$/.test(normalize(value).trim
 const text=value=>value==null?'':String(value);
 function mapped(item){
   const values={brand:text(item.brand),model:text(item.model),year:text(item.manufacture_date),
-    type:text(item.type),inventoryOriginalNumber:text(item.original_number),destination:'Museo'};
+    type:text(item.type),version:text(item.type),inventoryOriginalNumber:text(item.original_number),destination:'Museo'};
   if (Object.hasOwn(item,'notes')) values.inventoryNotes=text(item.notes);
   if (Object.hasOwn(item,'guided_details')) {
     const details=item.guided_details?.fields;
     const version=text(details?.['Versión / país']).trim();
     const keyboard=text(details?.Teclado).trim();
     const match=(key,value)=>fieldMap.get(key)[3].find(option=>normalize(option)===normalize(value))||'';
-    const country=match('country',version),language=match('keyboardLanguage',keyboard);
-    Object.assign(values,{color:text(details?.Color),country,version:country?'':version,
+    const historicalCountry=match('country',version),language=match('keyboardLanguage',keyboard);
+    const country=text(details?.['País']).trim() || historicalCountry;
+    Object.assign(values,{color:text(details?.Color),country,version:values.version || (historicalCountry?'':version),
       keyboardLanguage:language,keyboardLayout:language?'':keyboard});
   }
   return values;
