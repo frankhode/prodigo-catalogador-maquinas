@@ -75,12 +75,13 @@ test('guided inventory fills new fields on older records and keeps edits on late
   assert.equal(record.keyboardLayout,'QWERTZ');
   assert.equal(record.inventoryNotes,'Comprada con funda');
   const edited=saveRecord(catalog,{...record,color:'Gris verdoso',keyboardLayout:''});
-  const updated=incorporateInventory(edited,[{...source,guided_details:{fields:{
-    Color:'Azul', 'Versión / país':'Segunda serie', Teclado:'Inglés',
+  const updated=incorporateInventory(edited,[{...source,type:'Segunda serie',guided_details:{fields:{
+    Color:'Azul', 'País':'Checoslovaquia', Teclado:'Inglés',
   }}}]).catalog.records[0];
   assert.equal(updated.color,'Gris verdoso');
   assert.equal(updated.keyboardLayout,'');
   assert.equal(updated.version,'Segunda serie');
+  assert.equal(updated.country,'Checoslovaquia');
   assert.equal(updated.keyboardLanguage,'Inglés');
   assert.equal(incorporateInventory(emptyCatalog(),[source]).catalog.records[0].images.length,0);
 });

@@ -1,7 +1,7 @@
 import * as shared from './supabase-catalog.js?v=1.5.5';
 import {vocabularyFor} from './vocabulary.js?v=1.4.2';
 import {attachCombo,closePicker} from './combo.js?v=1.4.2';
-import {incorporateInventory} from './inventory.js?v=1.5.5';
+import {incorporateInventory} from './inventory.js?v=1.5.7';
 import {relationCandidates,searchRelations} from './relations.js?v=1.5.6';
 import {centralFields,fields,fieldMap,bulkFields,manufactureFields,standaloneDocumentFields,optionalFields,observationFields} from './schema.js?v=1.5.5';
 import {emptyCatalog,newRecord,identificationDraft,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js?v=1.5.5';
