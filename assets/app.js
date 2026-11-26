@@ -47,10 +47,13 @@ function render(){
   $('connect-github').textContent=github.connected()?'Desconectar GitHub':'Conectar GitHub';
 }
 function card(r){
+  const isDocument=r.recordKind==='document',year=String(r.year??'').trim(),serial=String(r.serial??'').trim();
+  const cardTitle=title(r)+(!isDocument&&year?` (${year})`:'');
+  const cardCode=isDocument?r.id:(serial||'Sin nº de serie');
   const c=node('article','card'+(state.selected.has(r.id)?' selected':''));const label=node('label','card-check');const check=node('input');check.type='checkbox';check.checked=state.selected.has(r.id);check.setAttribute('aria-label',`Seleccionar ${r.id}`);check.onchange=()=>{check.checked?state.selected.add(r.id):state.selected.delete(r.id);render();};label.append(check);c.append(label);
-  const b=node('button','card-open');b.setAttribute('aria-label',`Editar ${r.id}, ${title(r)}`);b.onclick=()=>openRecord(r.id);
-  const image=node('div','card-image'),primary=r.images.find(i=>i.id===r.primaryImageId)||r.images[0];if(primary){const img=node('img');img.src=primary.thumb||primary.src;img.alt=primary.caption||title(r);img.loading='lazy';image.append(img);}else image.append(node('span','placeholder','⌨'));
-  const body=node('div','card-body'),code=node('div','card-code');code.append(node('span','',r.id),node('span','badge'+(r.status==='Catalogada'?' done':''),r.status||'Borrador'));body.append(code,node('h2','',title(r)),node('p','card-info',[r.year,r.country,r.type].filter(Boolean).join(' · ')||'Datos por completar'));
+  const b=node('button','card-open');b.setAttribute('aria-label',`Editar ${r.inventory||cardCode}, ${cardTitle}`);b.onclick=()=>openRecord(r.id);
+  const image=node('div','card-image'),primary=r.images.find(i=>i.id===r.primaryImageId)||r.images[0];if(primary){const img=node('img');img.src=primary.thumb||primary.src;img.alt=primary.caption||cardTitle;img.loading='lazy';image.append(img);}else image.append(node('span','placeholder','⌨'));
+  const body=node('div','card-body'),code=node('div','card-code');code.append(node('span','',cardCode),node('span','badge'+(r.status==='Catalogada'?' done':''),r.status||'Borrador'));body.append(code,node('h2','',cardTitle),node('p','card-info',[isDocument?year:'',r.country,r.type].filter(Boolean).join(' · ')||(year?'':'Datos por completar')));
   const foot=node('div','card-foot');foot.append(node('span','',r.inventory||'Sin inventario'),node('span','',`${r.images.length} ${r.images.length===1?'imagen':'imágenes'}`));body.append(foot);b.append(image,body);c.append(b);return c;
 }
 function isDirty(){return state.draft&&state.dirty;}
