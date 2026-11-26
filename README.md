@@ -96,3 +96,7 @@ El JSON compartido contiene la base inicial del inventario y se actualiza leyend
 - Versión/país y teclado legados se leen sin modificar la base. Al editar un par en cualquiera de las interfaces, se graban sus campos independientes (`type` para versión y `País` para país). Los nombres de países e idiomas reconocidos se ubican en el campo correspondiente; lo demás se conserva como versión o distribución.
 - Los datos exclusivos de catalogación (estado, colección, documentación, observaciones, etc.) permanecen en `machine_catalog_records`. Una ficha anterior que tuviera correcciones divergentes ofrece revisar los valores antiguos sin pisar silenciosamente el inventario; se puede elegir el valor anterior o mantener el actual.
 - Si otra persona editó el objeto o la ficha después de abrirla, se rechaza el guardado entero. Refrescar para leer la última versión y aplicar la corrección. No se crean números P desde el catalogador ni se cambian fotos, destino o estado de etiquetado mediante este flujo.
+
+### Tipo de máquina compartido
+
+La versión sigue en `inventory_items.type`; el tipo de máquina (Portátil, Escritorio, etc.) se guarda en `guided_details.fields.Tipo`. Ejecutar `supabase/202611260003_machine_type.sql` después de la migración de campos compartidos para editar Tipo, Versión o País desde el catalogador. No altera registros existentes. El tipo de teclado permanece independiente.

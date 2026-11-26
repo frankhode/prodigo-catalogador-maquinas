@@ -1,13 +1,13 @@
 import {emptyCatalog,newRecord,normalize,parseCatalog,saveRecord} from './core.js?v=1.5.5';
 import {fieldMap,requiredFields} from './schema.js?v=1.5.5';
 import {INVENTORY_ENDPOINT,inventoryPhoto} from './inventory-source.js?v=1.5.4';
-import {applyCommonFields} from './shared-fields.js?v=1.5.8';
+import {applyCommonFields,machineTypeAndVersion} from './shared-fields.js?v=1.6.0';
 export {INVENTORY_ENDPOINT};
 const isMachine=value=>/^maquinas? (?:de )?escribir$/.test(normalize(value).trim().replace(/\s+/g,' '));
 const text=value=>value==null?'':String(value);
 function mapped(item){
   const values={brand:text(item.brand),model:text(item.model),year:text(item.manufacture_date),
-    type:text(item.type),version:text(item.type),inventoryOriginalNumber:text(item.original_number),destination:'Museo'};
+    ...machineTypeAndVersion(item),inventoryOriginalNumber:text(item.original_number),destination:'Museo'};
   if (Object.hasOwn(item,'notes')) values.inventoryNotes=text(item.notes);
   if (Object.hasOwn(item,'guided_details')) {
     const details=item.guided_details?.fields;

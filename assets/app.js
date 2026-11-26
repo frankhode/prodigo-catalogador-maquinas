@@ -1,8 +1,8 @@
 import * as shared from './supabase-catalog.js?v=1.5.8';
-import {sharedPatch,stripSharedFields,applyCommonFields,hydrateSharedRecord} from './shared-fields.js?v=1.5.8';
+import {sharedPatch,stripSharedFields,applyCommonFields,hydrateSharedRecord} from './shared-fields.js?v=1.6.0';
 import {vocabularyFor} from './vocabulary.js?v=1.4.2';
 import {attachCombo,closePicker} from './combo.js?v=1.4.2';
-import {incorporateInventory} from './inventory.js?v=1.5.8';
+import {incorporateInventory} from './inventory.js?v=1.6.0';
 import {relationCandidates,searchRelations} from './relations.js?v=1.5.6';
 import {centralFields,fields,fieldMap,bulkFields,manufactureFields,standaloneDocumentFields,optionalFields,observationFields} from './schema.js?v=1.5.9';
 import {emptyCatalog,newRecord,identificationDraft,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js?v=1.5.5';
@@ -149,7 +149,7 @@ function renderIdentification(){
   if(state.tab===0)renderLegacyFields(form);
   let nav=$('catalog-tabs');if(!nav){nav=node('nav','catalog-tabs');nav.id='catalog-tabs';form.before(nav);}nav.replaceChildren();for(const [i,label] of tabs.entries()){const b=node('button',state.tab===i?'primary':'',String(i+1)+'. '+label);if(![0,1,4].includes(i)){b.classList.add('preview-tab');b.title='Solo consulta';}b.setAttribute('data-tab-number',String(i+1));b.setAttribute('aria-label',label+(![0,1,4].includes(i)?' (solo consulta)':''));b.setAttribute('aria-current',state.tab===i?'true':'false');b.type='button';b.disabled=state.draft.recordKind==='document'&&i===1;b.onclick=()=>{state.tab=i;renderIdentification();};nav.append(b);}
  $('identification-title').textContent=tabs[state.tab||0]+(state.tab===0?' · Obligatoria':[1,4].includes(state.tab)?' · Optativa':' · Solo consulta');
- if(state.tab===4)renderDocuments(form);else for(const def of (state.tab===0?(state.draft.recordKind==='document'?standaloneDocumentFields:centralFields):state.tab===1?manufactureFields.filter(def=>def[0]!=='type'):optionalFields[state.tab]))form.append(fieldControl(def,state.draft[def[0]],value=>{state.draft[def[0]]=value;markDirty();}));
+ if(state.tab===4)renderDocuments(form);else for(const def of (state.tab===0?(state.draft.recordKind==='document'?standaloneDocumentFields:centralFields):state.tab===1?manufactureFields:optionalFields[state.tab]))form.append(fieldControl(def,state.draft[def[0]],value=>{state.draft[def[0]]=value;markDirty();}));
   const note=observationFields[state.tab||0];form.append(fieldControl(note,state.draft[note[0]],value=>{state.draft[note[0]]=value;markDirty();}));
   document.querySelector('.entry').scrollTo(0,0);
 }

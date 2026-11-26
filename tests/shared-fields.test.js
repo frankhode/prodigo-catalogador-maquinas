@@ -35,7 +35,7 @@ test('catalogar envía sólo campos comunes modificados y separa definitivamente
   const r=incorporateInventory(emptyCatalog(),[i]).catalog.records[0];
   assert.equal(r.country,'Italia');assert.equal(r.keyboardLayout,'QWERTZ');
   const edited={...r,version:'Segunda serie',keyboardLanguage:'Alemán',serial:'',notes:'Nota de catalogación',collection:'Colección'};
-  assert.deepEqual(sharedPatch(edited),{inventory_revision:1,changes:{serial:'',version:'Segunda serie',country:'Italia',keyboardLanguage:'Alemán',keyboardLayout:'QWERTZ'}});
+  assert.deepEqual(sharedPatch(edited),{inventory_revision:1,changes:{serial:'',type:'',version:'Segunda serie',country:'Italia',keyboardLanguage:'Alemán',keyboardLayout:'QWERTZ'}});
   const payload=stripSharedFields(edited);
   assert.equal(payload.inventory,'P000001');assert.equal(payload.collection,'Colección');assert.equal(payload.notes,'Nota de catalogación');
   assert.ok(!('serial' in payload));assert.ok(!('fields' in payload.inventorySource));assert.ok(!('revision' in payload.inventorySource));
@@ -60,4 +60,16 @@ test('un dispositivo nuevo puede cargar una ficha catalogada que ya no duplica l
   assert.equal(fresh.brand,'Underwood actualizada');assert.equal(fresh.model,'3 bank');
   const restored=incorporateInventory({...emptyCatalog(),records:[fresh]},[item({brand:'Underwood actualizada',revision:9})]).catalog.records[0];
   assert.equal(restored.status,'Catalogada');assert.equal(restored.inventorySource.revision,9);
+});
+
+test('tipo de máquina compartido, sin pisar versión o distribución del teclado',()=>{
+  let r=commonFields(item({type:'Portátil',guided_details:{fields:{'Versión / país':'Segunda serie','Distribución del teclado':'QWERTY'}}}));
+  assert.equal(r.type,'Portátil');assert.equal(r.version,'Segunda serie');assert.equal(r.keyboardLayout,'QWERTY');
+  const i=item({type:'Segunda serie',guided_details:{fields:{Tipo:'Escritorio','Distribución del teclado':'QWERTY'}}});
+  const c=incorporateInventory(emptyCatalog(),[i]).catalog;
+  r=c.records[0];
+  assert.equal(r.type,'Escritorio');assert.equal(r.version,'Segunda serie');
+  assert.deepEqual(sharedPatch({...r,type:'Ultraportátil'}).changes,{type:'Ultraportátil',version:'Segunda serie',country:''});
+  assert.equal(commonFields(item({type:'Portátil',guided_details:{fields:{Tipo:''}}})).type,'');
+  assert.equal(commonFields(item({type:'Portátil',guided_details:{fields:{Tipo:''}}})).version,'Portátil');
 });
