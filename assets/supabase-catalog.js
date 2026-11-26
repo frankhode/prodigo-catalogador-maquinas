@@ -12,12 +12,12 @@ async function client(){
   return supabase;
 }
 function check(result){if(result.error)throw Error(result.error.message);return result.data;}
-export async function readMachineInventory(){
+export async function readMachineInventory({allDestinations=false}={}){
   const c=await client(),items=[];
   for(let offset=0;;offset+=200){
-    const page=check(await c.from('inventory_items')
-      .select('code,category,brand,model,manufacture_date,type,original_number,notes,photo_path,extra_photos,guided_details,revision')
-      .eq('destination','museo').order('code').range(offset,offset+199));
+    let query=c.from('inventory_items').select('code,category,brand,model,manufacture_date,type,original_number,notes,photo_path,extra_photos,guided_details,revision,destination');
+    if(!allDestinations)query=query.eq('destination','museo');
+    const page=check(await query.order('code').range(offset,offset+199));
     items.push(...page.map(({photo_path,extra_photos,...item})=>({
       ...item,photo_count:photo_path ? 1+(extra_photos?.length||0) : 0,
     })));

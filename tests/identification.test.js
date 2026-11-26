@@ -26,3 +26,9 @@ test('an intentionally blank denomination remains blank and new text fields reje
     assert.throws(()=>parseCatalog(catalog),/debe contener texto/);
   }
 });
+
+import {centralFields,manufactureFields} from '../assets/schema.js';
+test('la página inicial replica exactamente los campos de inventario',()=>{
+ assert.deepEqual(centralFields.map(f=>f[0]),['denomination','brand','model','year','serial','version','mechanism','color','country','keyboardLanguage','type','destination','inventoryNotes']);
+ assert.ok(!manufactureFields.some(f=>centralFields.some(c=>c[0]===f[0])));
+});

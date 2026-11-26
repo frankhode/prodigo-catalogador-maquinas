@@ -1,4 +1,4 @@
-import {normalize,safeImage,title} from './core.js?v=1.5.5';
+import {normalize,safeImage,title} from './core.js?v=1.6.1';
 import {inventoryPhoto} from './inventory-source.js?v=1.5.4';
 
 // Index descriptive values, including nested guided details and catalogue documentation.

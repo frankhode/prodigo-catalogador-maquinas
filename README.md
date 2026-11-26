@@ -100,3 +100,16 @@ El JSON compartido contiene la base inicial del inventario y se actualiza leyend
 ### Tipo de máquina compartido
 
 La versión sigue en `inventory_items.type`; el tipo de máquina (Portátil, Escritorio, etc.) se guarda en `guided_details.fields.Tipo`. Ejecutar `supabase/202611260003_machine_type.sql` después de la migración de campos compartidos para editar Tipo, Versión o País desde el catalogador. No altera registros existentes. El tipo de teclado permanece independiente.
+
+### Identificación común con inventario (26/11/2026)
+
+Ejecutar una vez en el mismo proyecto de Supabase, después de las migraciones anteriores:
+[`supabase/202611260004_identification.sql`](supabase/202611260004_identification.sql).
+La primera pestaña replica la ficha de inventario de máquinas. El sistema de funcionamiento
+(Mecánico, Electromecánico, Electrónico o sin especificar) es independiente de Tipo y Versión
+y se guarda en `inventory_items.guided_details.fields["Sistema de funcionamiento"]`.
+El número de serie sigue siendo el valor de `inventory_items.original_number` para máquinas;
+la antigua numeración original del catalogador queda conservada como dato histórico, sin otro campo editable.
+Destino también es común: al cambiarlo a Tienda, Otros o sin destino, la pieza sale de la grilla
+del Museo sin eliminar la ficha de catalogación. Se recupera al volver a asignar Museo.
+La colección permanece disponible en Fabricación y las observaciones de identificación anteriores se conservan.

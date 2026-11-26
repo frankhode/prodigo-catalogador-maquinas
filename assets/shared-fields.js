@@ -1,11 +1,18 @@
 // Production: the P record is the only authority for these fields. The M
 // payload retains exclusively cataloguing data, plus optional legacy evidence.
-import {normalize} from './core.js?v=1.5.5';
-import {fieldMap} from './schema.js?v=1.5.5';
+import {normalize} from './core.js?v=1.6.1';
+import {fieldMap} from './schema.js?v=1.6.1';
 const text=value=>value==null?'':String(value);
 const match=(key,value)=>fieldMap.get(key)[3].find(option=>normalize(option)===normalize(value))||'';
 const own=(obj,key)=>Object.hasOwn(obj||{},key);
-export const COMMON_FIELDS=['brand','model','year','serial','inventoryNotes','color','type','version','country','keyboardLanguage','keyboardLayout'];
+export const COMMON_FIELDS=['brand','model','year','serial','inventoryNotes','color','type','version','country','keyboardLanguage','keyboardLayout','mechanism','destination'];
+export const destinationLabel=value=>({museo:'Museo',tienda:'Tienda',otros:'Otros'})[value]||'';
+const systemLabel='Sistema de funcionamiento';
+function preserveLegacyMechanism(record,item){
+  if(!item||record.sharedInventoryVersion>=2||own(record.inventorySource?.fields,'mechanism'))return;
+  const previous=text(record.mechanism).trim();
+  if(previous&&previous!==text(item.guided_details?.fields?.[systemLabel]))record.legacySharedFields={...record.legacySharedFields,mechanism:previous};
+}
 const pairs=[['keyboardLanguage','keyboardLayout']];
 const isLegacyType=value=>/^(?:de escritorio|escritorio|portatil|ultraportatil)$/.test(normalize(value).trim());
 export function machineTypeAndVersion(item){
@@ -24,13 +31,15 @@ export function commonFields(item){
     ...machineTypeAndVersion(item),inventoryNotes:text(item.notes),color:text(details.Color),
     country:own(details,'País')?text(details['País']):own(details,'País de fabricación')?text(details['País de fabricación']):oldCountry,
     keyboardLanguage:own(details,'Idioma del teclado')?text(details['Idioma del teclado']):oldLanguage,
-    keyboardLayout:own(details,'Distribución del teclado')?text(details['Distribución del teclado']):oldLanguage?'':keyboard};
+    keyboardLayout:own(details,'Distribución del teclado')?text(details['Distribución del teclado']):oldLanguage?'':keyboard,
+    mechanism:text(details[systemLabel]),destination:own(item,'destination')?destinationLabel(item.destination):'Museo'};
 }
 export function applyCommonFields(record,item){
+  preserveLegacyMechanism(record,item);
   const values=commonFields(item),previous=record.inventorySource?.fields||{};
   const corrections={...record.legacySharedFields};
   if(!record.sharedInventoryVersion){
-    for(const key of COMMON_FIELDS){
+    for(const key of COMMON_FIELDS.filter(k=>k!=='destination')){
       const old=text(record[key]);
       // Only preserve previous cataloguer edits, not copies from old snapshots.
       if(old!==values[key] && (own(previous,key)?old!==text(previous[key]):old!==''))corrections[key]=old;
@@ -44,7 +53,7 @@ export function applyCommonFields(record,item){
   }
   record.legacySharedFields=corrections;
   Object.assign(record,values);
-  record.sharedInventoryVersion=1;
+  record.sharedInventoryVersion=2;
   if(record.status==='Catalogada'&&(!record.brand.trim()||!record.model.trim()))record.status='En revisión';
   return values;
 }
@@ -69,7 +78,7 @@ export function stripSharedFields(record){
   const payload=structuredClone(record);
   for(const key of [...COMMON_FIELDS,'type','destination'])delete payload[key];
   if(payload.inventorySource){delete payload.inventorySource.fields;delete payload.inventorySource.revision;}
-  payload.sharedInventoryVersion=1;
+  payload.sharedInventoryVersion=2;
   return payload;
 }
 
@@ -77,7 +86,7 @@ export function stripSharedFields(record){
 // before parseCatalog validates mandatory fields, including on a fresh device.
 export function hydrateSharedRecord(record,item){
   if(record.sharedInventoryVersion){
-    if(item)Object.assign(record,commonFields(item));
+    if(item){preserveLegacyMechanism(record,item);Object.assign(record,commonFields(item));}
     if(record.status==='Catalogada'&&(!text(record.brand).trim()||!text(record.model).trim()))record.status='En revisión';
   }
   return record;

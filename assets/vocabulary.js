@@ -1,4 +1,4 @@
-import {fields,documentFields,imageViews} from './schema.js?v=1.4.2';
+import {fields,documentFields,imageViews} from './schema.js?v=1.6.1';
 export const termKey=value=>String(value??'').trim().replace(/\s+/g,' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('es');
 export function uniqueTerms(values){
   const seen=new Set();return values.filter(value=>{if(typeof value!=='string'||!value.trim())return false;const key=termKey(value);if(seen.has(key))return false;seen.add(key);return true;}).map(value=>value.trim());

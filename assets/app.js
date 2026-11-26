@@ -1,11 +1,11 @@
-import * as shared from './supabase-catalog.js?v=1.5.8';
-import {sharedPatch,stripSharedFields,applyCommonFields,hydrateSharedRecord} from './shared-fields.js?v=1.6.0';
-import {vocabularyFor} from './vocabulary.js?v=1.4.2';
+import * as shared from './supabase-catalog.js?v=1.6.1';
+import {sharedPatch,stripSharedFields,applyCommonFields,hydrateSharedRecord} from './shared-fields.js?v=1.6.1';
+import {vocabularyFor} from './vocabulary.js?v=1.6.1';
 import {attachCombo,closePicker} from './combo.js?v=1.4.2';
-import {incorporateInventory} from './inventory.js?v=1.6.0';
-import {relationCandidates,searchRelations} from './relations.js?v=1.5.6';
-import {centralFields,fields,fieldMap,bulkFields,manufactureFields,standaloneDocumentFields,optionalFields,observationFields} from './schema.js?v=1.5.9';
-import {emptyCatalog,newRecord,identificationDraft,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js?v=1.5.5';
+import {incorporateInventory} from './inventory.js?v=1.6.1';
+import {relationCandidates,searchRelations} from './relations.js?v=1.6.1';
+import {centralFields,fields,fieldMap,bulkFields,manufactureFields,standaloneDocumentFields,optionalFields,observationFields} from './schema.js?v=1.6.1';
+import {emptyCatalog,newRecord,identificationDraft,title,missing,normalize,validateRecord,parseCatalog,serialize,saveRecord,filterRecords,mergeCatalogs} from './core.js?v=1.6.1';
 import {readLocal,writeLocal,download} from './storage.js?v=1.4.2';
 import * as github from './github.js?v=1.4.2';
 import {prepareImage,rotateImage} from './media.js?v=1.4.2';
@@ -26,17 +26,17 @@ async function commit(catalog,{sha=state.remoteSha,remoteDirty=true}={}){
 function vocabulary(key){return vocabularyFor(state.catalog,key,state.draft);}
 function filters(){return {q:$('search').value,brand:$('brand-filter').value,status:$('status-filter').value,pending:$('pending').value};}
 function render(){
-  const c=state.catalog;$('new').hidden=true;$('empty-new').hidden=true;$('total').textContent=c.records.length;$('complete').textContent=c.records.filter(r=>r.status==='Catalogada').length;$('drafts').textContent=c.records.filter(r=>r.status!=='Catalogada').length;
-  const prev=$('brand-filter').value;$('brand-filter').replaceChildren(option('','Todas las marcas'),...[...new Set(c.records.map(r=>r.brand).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')).map(v=>option(v)));$('brand-filter').value=prev;
+  const c=state.catalog;const museumRecords=c.records.filter(r=>!Object.hasOwn(r,'destination')||r.destination==='Museo');$('new').hidden=true;$('empty-new').hidden=true;$('total').textContent=museumRecords.length;$('complete').textContent=museumRecords.filter(r=>r.status==='Catalogada').length;$('drafts').textContent=museumRecords.filter(r=>r.status!=='Catalogada').length;
+  const prev=$('brand-filter').value;$('brand-filter').replaceChildren(option('','Todas las marcas'),...[...new Set(museumRecords.map(r=>r.brand).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')).map(v=>option(v)));$('brand-filter').value=prev;
   const status=$('status-filter').value;$('status-filter').replaceChildren(option('','Todos los estados'),...vocabulary('status').map(v=>option(v)));$('status-filter').value=status;
-  const visible=filterRecords(c.records,filters());const sort=$('sort').value;
+  const visible=filterRecords(museumRecords,filters());const sort=$('sort').value;
   visible.sort((a,b)=>{
     if(sort==='updatedAt')return String(b.updatedAt||'').localeCompare(String(a.updatedAt||''));
     if(sort==='year'){const ay=String(a.year||'').match(/\d{4}/)?.[0],by=String(b.year||'').match(/\d{4}/)?.[0];return (Number(ay||99999)-Number(by||99999))||a.id.localeCompare(b.id,'es',{numeric:true});}
     return String(sort==='brand'?title(a):a.id).localeCompare(String(sort==='brand'?title(b):b.id),'es',{numeric:true});
   });state.visible=visible;
   const visibleIds=new Set(visible.map(r=>r.id));for(const id of state.selected)if(!visibleIds.has(id))state.selected.delete(id);
-  $('count').textContent=`${visible.length} de ${c.records.length} objetos${state.selected.size?` · ${state.selected.size} seleccionadas`:''}`;
+  $('count').textContent=`${visible.length} de ${museumRecords.length} objetos${state.selected.size?` · ${state.selected.size} seleccionadas`:''}`;
   $('bulk-open').disabled=!state.sharedReady||!state.selected.size;
   $('gallery').replaceChildren(...visible.map(card));$('gallery').classList.toggle('images-only',$('images-only').checked);
   $('gallery').style.setProperty('--card-size',['155px','230px','320px','440px'][state.size]);$('size').textContent=`Miniaturas: ${['pequeñas','medianas','grandes','muy grandes'][state.size]}`;
@@ -69,12 +69,29 @@ function focusField(){requestAnimationFrame(()=>{$('fields').querySelector('inpu
 function markDirty(){state.dirty=true;}
 function fieldControl(def,value,onchange,prefix='f'){
   const locked=prefix==='f'&&![0,1,4].includes(state.tab);
-  const [key,label,type]=def;const mandatory=prefix==='f'&&state.tab===0&&(state.draft?.recordKind==='document'?['documentType','documentTitle']:['inventory','denomination','brand','model']).includes(key);const wrapper=node('div','field-control'+(type==='area'?' wide':''));const caption=node('label');caption.htmlFor=`${prefix}-${key}`;caption.append(node('span','',label+(mandatory?' *':'')));wrapper.append(caption);
-  const input=node(type==='area'?'textarea':'input');input.id=`${prefix}-${key}`;input.name=key;input.value=value||'';
-  if(key==='inventory'){input.readOnly=true;input.title='Código conservado del inventario de Pródigo';}
+  const [key,label,type,choices]=def;const mandatory=prefix==='f'&&state.tab===0&&(state.draft?.recordKind==='document'?['documentType','documentTitle']:['inventory','denomination','brand','model']).includes(key);const wrapper=node('div','field-control'+(type==='area'||type==='destination'||key==='denomination'?' wide':''));const caption=node('label');caption.htmlFor=`${prefix}-${key}`;caption.append(node('span','',label+(mandatory?' *':'')));wrapper.append(caption);
+  if(type==='destination'){
+    const controls=node('div','identification-destinations');controls.id=`${prefix}-${key}`;controls.setAttribute('role','group');controls.setAttribute('aria-label',label);
+    const buttons=choices.map(choice=>{
+      const button=node('button','destination-choice',choice);button.type='button';
+      button.setAttribute('aria-pressed',String(choice===value));button.disabled=locked;
+      return button;
+    });
+    const clear=node('button','subtle clear-destination','Dejar sin destino');clear.type='button';clear.disabled=locked;
+    const change=choice=>{onchange(choice);for(const button of buttons)button.setAttribute('aria-pressed',String(button.textContent===choice));};
+    for(const [i,button] of buttons.entries())button.onclick=()=>change(choices[i]);
+    clear.onclick=()=>change('');controls.append(...buttons);wrapper.append(clear,controls);return wrapper;
+  }
+  const input=node(type==='area'?'textarea':type==='fixed'?'select':'input');
+  if(type==='fixed'){
+    input.append(option('','Sin especificar'),...choices.map(choice=>option(choice)));
+    if(value&&!choices.includes(value))input.append(option(value,value+' (anterior)'));
+  }input.id=`${prefix}-${key}`;input.name=key;input.value=value||'';
+  if(key==='inventory'||key==='denomination'&&prefix==='f'){input.readOnly=true;input.title='Dato conservado del inventario de Pródigo';}
   input.addEventListener('input',()=>onchange(input.value));wrapper.append(input);
   const vocabularyKey=prefix.startsWith('doc-')?`document.${key}`:key;
   if(locked){input.disabled=true;return wrapper;}
+  if(type==='fixed'||input.readOnly||key==='inventoryNotes')return wrapper;
   if(!key.startsWith('observations'))attachCombo(input,{label,getOptions:()=>vocabulary(vocabularyKey),onChange:onchange});else input.rows=5;return wrapper;
 }
 const tabs=['Identificación','Fabricación','Comercialización','Procedencia y trayectoria','Documentación','Conservación','Museografía','Gestión y validación'];
@@ -138,7 +155,9 @@ function renderLegacyFields(form){
     row.append(node('span','',(fieldMap.get(key)?.[1]||key)+': '+(value||'(vacío)')));
     const use=node('button','','Usar valor anterior'),discard=node('button','','Conservar valor actual');
     use.type=discard.type='button';
-    const resolve=apply=>{if(apply)state.draft[key]=value;delete state.draft.legacySharedFields[key];markDirty();renderIdentification();};
+    const previousSystem=({mecanica:'Mecánico',mecanico:'Mecánico',electromecanica:'Electromecánico',electromecanico:'Electromecánico',electronica:'Electrónico',electronico:'Electrónico'})[normalize(value).trim()];
+    if(key==='mechanism'&&!previousSystem)use.disabled=true;
+    const resolve=apply=>{if(apply)state.draft[key]=key==='mechanism'?previousSystem:value;delete state.draft.legacySharedFields[key];markDirty();renderIdentification();};
     use.onclick=()=>resolve(true);discard.onclick=()=>resolve(false);row.append(use,discard);panel.append(row);
   }
   form.append(panel);
@@ -146,11 +165,12 @@ function renderLegacyFields(form){
 function renderIdentification(){
   closePicker();
   const form=$('fields');form.replaceChildren();
-  if(state.tab===0)renderLegacyFields(form);
+  form.classList.toggle('inventory-identification',state.tab===0&&state.draft.recordKind!=='document');
   let nav=$('catalog-tabs');if(!nav){nav=node('nav','catalog-tabs');nav.id='catalog-tabs';form.before(nav);}nav.replaceChildren();for(const [i,label] of tabs.entries()){const b=node('button',state.tab===i?'primary':'',String(i+1)+'. '+label);if(![0,1,4].includes(i)){b.classList.add('preview-tab');b.title='Solo consulta';}b.setAttribute('data-tab-number',String(i+1));b.setAttribute('aria-label',label+(![0,1,4].includes(i)?' (solo consulta)':''));b.setAttribute('aria-current',state.tab===i?'true':'false');b.type='button';b.disabled=state.draft.recordKind==='document'&&i===1;b.onclick=()=>{state.tab=i;renderIdentification();};nav.append(b);}
  $('identification-title').textContent=tabs[state.tab||0]+(state.tab===0?' · Obligatoria':[1,4].includes(state.tab)?' · Optativa':' · Solo consulta');
  if(state.tab===4)renderDocuments(form);else for(const def of (state.tab===0?(state.draft.recordKind==='document'?standaloneDocumentFields:centralFields):state.tab===1?manufactureFields:optionalFields[state.tab]))form.append(fieldControl(def,state.draft[def[0]],value=>{state.draft[def[0]]=value;markDirty();}));
-  const note=observationFields[state.tab||0];form.append(fieldControl(note,state.draft[note[0]],value=>{state.draft[note[0]]=value;markDirty();}));
+  if(state.tab===0)renderLegacyFields(form);
+  const note=observationFields[state.tab||0];if(state.tab!==0||state.draft.recordKind==='document'||state.draft[note[0]])form.append(fieldControl(note,state.draft[note[0]],value=>{state.draft[note[0]]=value;markDirty();}));
   document.querySelector('.entry').scrollTo(0,0);
 }
 function currentImage(){return state.draft?.images[state.image];}
@@ -185,7 +205,7 @@ async function refreshProduction(){
   state.sharedReady=false;
   $('inventory-state').textContent='Leyendo máquinas del inventario…';
   try{
-    const [rows,items]=await Promise.all([shared.readShared(),shared.readMachineInventory()]);
+    const [rows,items]=await Promise.all([shared.readShared(),shared.readMachineInventory({allDestinations:true})]);
     const c=structuredClone(state.catalog);
     c.sharedRevisions={};
     const itemsByCode=new Map(items.map(item=>[item.code,item]));
@@ -201,16 +221,17 @@ async function refreshProduction(){
       if(index>=0)c.records[index]=record;else c.records.push(record);
       c.sharedRevisions[row.inventory_code]=row.revision;
     }
-    const {catalog,summary}=incorporateInventory(c,items);
+    const linked=new Set(c.records.map(r=>r.inventory));
+    const {catalog,summary}=incorporateInventory(c,items.filter(item=>item.destination==='museo'||linked.has(item.code)));
     await commit(catalog,{remoteDirty:false});
     try{await shared.writeShared([]);}catch(e){
       $('shared-state').textContent='Guardado compartido todavía no disponible.';
-      $('inventory-state').textContent=summary.sourceCount+' máquinas del Museo · solo lectura';
+      $('inventory-state').textContent=catalog.records.filter(r=>r.destination==='Museo').length+' máquinas del Museo · solo lectura';
       notice(e.message,true);render();return;
     }
     state.sharedReady=true;render();
     state.inventoryCheckedAt=new Date().toISOString();
-    $('inventory-state').textContent=`${summary.sourceCount} máquinas en Museo · ${summary.added} nuevas · ${summary.updated} actualizadas`;
+    $('inventory-state').textContent=`${catalog.records.filter(r=>r.destination==='Museo').length} máquinas en Museo · ${summary.added} nuevas · ${summary.updated} actualizadas`;
     $('shared-state').textContent=rows.length+' fichas compartidas · conexión activa.';
     notice('Inventario y catálogo compartido actualizados.');
   }catch(e){
@@ -230,7 +251,7 @@ async function saveProduction(c,records){
     const r=c.records.find(record=>record.inventory===row.inventory_code);
     if(!r||!row.inventory)throw Error('Respuesta de inventario incompleta. Actualizá antes de seguir.');
     const values=applyCommonFields(r,row.inventory);
-    r.inventorySource={...r.inventorySource,fields:values,revision:row.inventory.revision};
+    r.inventorySource={...r.inventorySource,scope:row.inventory.destination||'',fields:values,revision:row.inventory.revision};
   }
   try{await commit(c,{remoteDirty:false});}catch(e){state.catalog=c;state.sharedReady=false;throw Error('Supabase confirmó el guardado, pero falló la copia local. Recargá antes de continuar.');}
 }

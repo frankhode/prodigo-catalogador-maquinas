@@ -73,3 +73,22 @@ test('tipo de máquina compartido, sin pisar versión o distribución del teclad
   assert.equal(commonFields(item({type:'Portátil',guided_details:{fields:{Tipo:''}}})).type,'');
   assert.equal(commonFields(item({type:'Portátil',guided_details:{fields:{Tipo:''}}})).version,'Portátil');
 });
+
+test('sistema de funcionamiento y destino pertenecen al inventario y permiten borrar el valor',()=>{
+ const source=item({destination:'museo',guided_details:{group:'Oficina',fields:{'Sistema de funcionamiento':'Mecánico',Tipo:'Escritorio'}}});
+ const r=incorporateInventory(emptyCatalog(),[source]).catalog.records[0];
+ assert.equal(r.mechanism,'Mecánico');assert.equal(r.destination,'Museo');
+ assert.deepEqual(sharedPatch({...r,mechanism:'Electromecánico',destination:'Tienda'}).changes,{mechanism:'Electromecánico',destination:'Tienda'});
+ assert.deepEqual(sharedPatch({...r,mechanism:'',destination:''}).changes,{mechanism:'',destination:''});
+ const payload=stripSharedFields(r);
+ assert.ok(!Object.hasOwn(payload,'mechanism'));assert.ok(!Object.hasOwn(payload,'destination'));
+ const restored=hydrateSharedRecord(payload,item({...source,destination:'tienda',guided_details:{fields:{'Sistema de funcionamiento':'Electrónico'}}}));
+ assert.equal(restored.mechanism,'Electrónico');assert.equal(restored.destination,'Tienda');
+});
+test('conserva la clasificación anterior del catalogador sin imponerla al inventario',()=>{
+ const old={...incorporateInventory(emptyCatalog(),[item()]).catalog.records[0],mechanism:'Eléctrica',sharedInventoryVersion:1};
+ delete old.inventorySource.fields.mechanism;
+ const fresh=incorporateInventory({...emptyCatalog(),records:[old]},[item()]).catalog.records[0];
+ assert.equal(fresh.mechanism,'');assert.equal(fresh.legacySharedFields.mechanism,'Eléctrica');
+ assert.equal(fresh.sharedInventoryVersion,2);
+});
